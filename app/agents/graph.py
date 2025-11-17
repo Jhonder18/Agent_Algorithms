@@ -1,60 +1,53 @@
 # app/agents/graph.py
 from __future__ import annotations
-from typing import Any, Dict, TypedDict, Optional
+from typing import Any
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from langgraph.graph import StateGraph, START, END
 
-# Nodos (ajusta los nombres si en tus archivos exportaste funciones con otro nombre)
+from app.agents.state import AnalyzerState
+
 from app.agents.nodes.normalize import normalize_node
 from app.agents.nodes.validate import validate_node
 from app.agents.nodes.ast_tool_node import ast_node
-from app.agents.nodes.costs_json import costs_node
-from app.agents.nodes.solve_json import solve_node
+from app.agents.nodes.costs import costs_node
+from app.agents.nodes.solve import solve_node
 from app.agents.nodes.summarize import summarize_node
 
-# (Opcional) Si ya tienes un router propio:
+# (Opcional) Planner propio
 try:
     from app.agents.planner import planner_decide  # Debe devolver "normalize" o "validate"
-except Exception:
+except Exception:  # pragma: no cover
     planner_decide = None
-
-
-# ---------------------------
-# Estado del grafo
-# ---------------------------
-class GraphState(TypedDict, total=False):
-    # Entrada
-    input_text: str      # Texto NL opcional
-    pseudocode: str      # Pseudocódigo (si ya lo traes o lo produce normalize)
-
-    # Resultados intermedios
-    validation: Dict[str, Any]
-    ast: Dict[str, Any]
-    costs: Dict[str, Any]
-    solution: Dict[str, Any]
-
-    # Agregación final opcional
-    result: Dict[str, Any]
 
 
 # ---------------------------
 # Router START -> normalize/validate
 # ---------------------------
-def _heuristic_router(state: GraphState) -> str:
+def _heuristic_router(state: AnalyzerState) -> str:
     """Fallback simple si no existe planner_decide."""
-    txt = (state.get("pseudocode")
-           or state.get("input_text")
-           or "")
+    txt = (state.get("pseudocode") or state.get("input_text") or "")
     # Marcadores típicos de tu pseudo (🡨, begin/end, for/while/if/return/CALL, etc.)
-    markers = ["🡨", "begin", "end", "for ", "while ", "if ", "CALL", "return", " then ", " do "]
+    markers = [
+        "🡨",
+        "begin",
+        "end",
+        "for ",
+        "while ",
+        "if ",
+        "CALL",
+        "return",
+        " then ",
+        " do ",
+    ]
     is_pseudo = any(m in txt for m in markers)
     return "validate" if is_pseudo else "normalize"
 
 
-def route_from_start(state: GraphState) -> str:
+def route_from_start(state: AnalyzerState) -> str:
     if planner_decide is not None:
         try:
             # Debe devolver exactamente "normalize" o "validate"
@@ -69,7 +62,7 @@ def route_from_start(state: GraphState) -> str:
 # Ensamblador del grafo
 # ---------------------------
 def build_graph():
-    g = StateGraph(GraphState)
+    g = StateGraph(AnalyzerState)
 
     # Registrar nodos
     g.add_node("normalize", normalize_node)  # NL -> pseudocode

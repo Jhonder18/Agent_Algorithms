@@ -1,11 +1,9 @@
 # app/agents/nodes/summarize.py
 from __future__ import annotations
-from typing import TypedDict, Dict, Any
-from app.services.llm import get_llm
+from typing import Dict, Any
 
-class AgentState(TypedDict, total=False):
-    result: Dict[str, Any]
-    summary: str
+from app.services.llm import get_llm
+from app.agents.state import AnalyzerState, update_metadata
 
 SUM_SYS = """
 Eres un redactor técnico. Resume en 4-6 líneas:
@@ -15,11 +13,17 @@ Eres un redactor técnico. Resume en 4-6 líneas:
 Devuelve SOLO texto plano.
 """
 
-def summarize_node(state: AgentState) -> Dict:
+
+def summarize_node(state: AnalyzerState) -> Dict[str, Any]:
     data = state.get("result") or {}
     llm = get_llm(temperature=0)
-    msgs = [{"role":"system","content":SUM_SYS},{"role":"user","content":str(data)}]
+    msgs = [
+        {"role": "system", "content": SUM_SYS},
+        {"role": "user", "content": str(data)},
+    ]
     summary = llm.invoke(msgs).content.strip()
-    return {"summary": summary}
+    meta_fragment = update_metadata(state, has_summary=True)
+    return {"summary": summary, **meta_fragment}
+
 
 __all__ = ["summarize_node"]

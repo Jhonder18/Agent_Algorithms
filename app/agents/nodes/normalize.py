@@ -1,22 +1,21 @@
 # app/agents/nodes/normalize.py
 from __future__ import annotations
-from typing import TypedDict, Dict, Any
-import os
+from typing import Dict, Any
 import re
+
 from app.services.llm import get_llm, strip_code_fences
-
-# Flecha de asignación que tu gramática espera (coincide con grammar.lark)
-ARROW = os.getenv("PSEUDO_ARROW", "🡨")
-
-class AgentState(TypedDict, total=False):
-    input_text: str
-    text: str
-    pseudocode: str
+from app.constants import ARROW
+from app.agents.state import AnalyzerState, update_metadata
 
 # --- Heurística: solo consideramos "canónico" si usa PALABRAS CLAVE EN INGLÉS
 #     y NO contiene equivalentes en español (para/si/mientras/etc.)
-CANONICAL_KW = re.compile(r"\b(for|while|repeat|until|if|then|else|begin|end|return|to|do)\b", re.I)
-SPANISH_KW   = re.compile(r"\b(para|mientras|repetir|hasta|si|entonces|sino|procedimiento)\b", re.I)
+CANONICAL_KW = re.compile(
+    r"\b(for|while|repeat|until|if|then|else|begin|end|return|to|do)\b", re.I
+)
+SPANISH_KW = re.compile(
+    r"\b(para|mientras|repetir|hasta|si|entonces|sino|procedimiento)\b", re.I
+)
+
 
 def looks_like_canonical_pseudo(text: str) -> bool:
     if not CANONICAL_KW.search(text):
@@ -25,6 +24,7 @@ def looks_like_canonical_pseudo(text: str) -> bool:
         # Tiene keywords en español -> NO es canónico, hay que normalizar con LLM
         return False
     return True
+
 
 # --- Prompt ESTRICTO para producir pseudocódigo que cumpla la gramática
 PROMPT = f"""
@@ -143,29 +143,48 @@ ERRORES COMUNES A EVITAR:
 ❌ NUNCA usar AND/OR/NOT en MAYÚSCULAS (usar: and, or, not en minúsculas)
 """
 
-def normalize_node(state: AgentState) -> Dict[str, Any]:
+
+def normalize_node(state: AnalyzerState) -> Dict[str, Any]:
     """
     Entrada:
       - input_text (o text): descripción en lenguaje natural o pseudocódigo "mezclado"
     Salida:
-      - {"pseudocode": "<pseudocódigo canónico>"}
+      - pseudocode normalizado y metadata indicando el tipo de input.
     """
     text = (state.get("input_text") or state.get("text") or "").strip()
     if not text:
-        return {"pseudocode": ""}
+        return {
+            "pseudocode": "",
+            **update_metadata(state, input_type="unknown", used_normalization=False),
+        }
 
     # Si parece canónico (solo keywords en inglés + begin/end), aceptar y normalizar flecha
     if looks_like_canonical_pseudo(text):
         pseudo = text.replace("->", ARROW).replace("←", ARROW).strip()
         if not pseudo.endswith("\n"):
             pseudo += "\n"
-        return {"pseudocode": pseudo}
+        return {
+            "pseudocode": pseudo,
+            **update_metadata(
+                state,
+                input_type="pseudocode",
+                used_normalization=False,
+            ),
+        }
 
     # Caso contrario: pedimos al LLM la versión canónica EXACTA
     llm = get_llm(temperature=0.0)
     msgs = [
         {"role": "system", "content": PROMPT},
-        {"role": "user", "content": f"AHORA CONVIERTE:\n{text}\n\nRESPUESTA (solo pseudocódigo, sin explicaciones, sin markdown, sin ```):"}
+        {
+            "role": "user",
+            "content": (
+                "AHORA CONVIERTE:\n"
+                f"{text}\n\n"
+                "RESPUESTA (solo pseudocódigo, sin explicaciones, "
+                "sin markdown, sin ```):"
+            ),
+        },
     ]
     out = strip_code_fences(llm.invoke(msgs).content).strip()
 
@@ -174,6 +193,14 @@ def normalize_node(state: AgentState) -> Dict[str, Any]:
     if not out.endswith("\n"):
         out += "\n"
 
-    return {"pseudocode": out}
+    return {
+        "pseudocode": out,
+        **update_metadata(
+            state,
+            input_type="natural_language",
+            used_normalization=True,
+        ),
+    }
+
 
 __all__ = ["normalize_node"]
