@@ -77,13 +77,18 @@ class PseudocodeToASTTransformer(Transformer):
         return VarDeclaration(names=names, line_start=line_start, line_end=line_end)
 
     def lvalue(self, children):
-        # NAME | NAME[expr] | NAME . NAME
+        # NAME | NAME[expr]([expr])* | NAME . NAME
         if len(children) == 1:
             return Var(name=str(children[0]))
         name = str(children[0])
         second = children[1]
         if isinstance(second, Expr):
-            return ArrayAccess(array=Var(name=name), index=second)
+            # Soporte para arrays multidimensionales: A[i][j]
+            base: Union[Var, ArrayAccess] = ArrayAccess(array=Var(name=name), index=second)
+            for extra in children[2:]:
+                if isinstance(extra, Expr):
+                    base = ArrayAccess(array=base, index=extra)
+            return base
         return Var(name=f"{name}.{second}")
 
     @v_args(meta=True)

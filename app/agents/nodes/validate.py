@@ -173,7 +173,8 @@ def validate_node(state: AnalyzerState) -> Dict[str, Any]:
     pseudocode → normaliza → valida con Lark → si falla, repara con LLM (+gramática)
     → devuelve código corregido + reporte de normalizaciones/errores.
     """
-    raw_code = (state.get("pseudocode") or "").strip()
+    # Si pseudocode está vacío pero input_text tiene seudocódigo, usarlo
+    raw_code = (state.get("pseudocode") or state.get("input_text") or state.get("text") or "").strip()
 
     if not raw_code:
         validation = {

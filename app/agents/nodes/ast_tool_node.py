@@ -37,6 +37,7 @@ def ast_node(state: AnalyzerState) -> Dict[str, Any]:
     ast_payload = {
         "success": bool(result.get("success")),
         "ast": ast_dict,
+        "ast_object": ast_obj,  # Guardar el objeto Program original para cost_model
         "metadata": {
             "source": "lark",
             "parser": "PseudocodeParser",

@@ -69,7 +69,20 @@ SINTAXIS OBLIGATORIA:
 6. ASIGNACIONES: Usar flecha {ARROW}
    variable {ARROW} valor
 
-7. ARRAYS: A[i] o rangos A[1..n]
+7. ARRAYS: 
+   - Arrays 1D: A[i]
+   - Arrays 2D: USAR CORCHETES DOBLES: A[i][j] (NO usar comas: A[i,j] ❌)
+   - Arrays 3D: A[i][j][k]
+   - Inicialización sin declaración de rango
+   Ejemplos CORRECTOS:
+   - C[i][j] {ARROW} 0
+   - suma {ARROW} suma + A[i][j]
+   - C[i][j] {ARROW} C[i][j] + A[i][k] * B[k][j]
+   
+   Ejemplos INCORRECTOS:
+   - C[1..n, 1..p] {ARROW} 0  ❌ (no usar rangos con comas)
+   - C[i, j] {ARROW} 0        ❌ (no usar comas en índices)
+   - A[i, k]                   ❌ (no usar comas)
 
 8. OPERADORES LÓGICOS: Siempre en minúsculas
    - and (conjunción)
@@ -135,12 +148,32 @@ begin
     end
 end
 
+Ejemplo 4 - Multiplicación de Matrices (ARRAYS 2D):
+multiplicar_matrices(A, B, n, m, p)
+begin
+    for i {ARROW} 1 to n do
+    begin
+        for j {ARROW} 1 to p do
+        begin
+            C[i][j] {ARROW} 0
+            for k {ARROW} 1 to m do
+            begin
+                C[i][j] {ARROW} C[i][j] + A[i][k] * B[k][j]
+            end
+        end
+    end
+    return C
+end
+
 ERRORES COMUNES A EVITAR:
 ❌ NUNCA escribir "repeat" sin "begin" después
 ❌ NUNCA omitir "begin...end" en loops o condicionales
 ❌ NUNCA usar ":" para asignaciones (usar {ARROW})
 ❌ NUNCA mezclar español e inglés en palabras clave
 ❌ NUNCA usar AND/OR/NOT en MAYÚSCULAS (usar: and, or, not en minúsculas)
+❌ NUNCA usar comas en índices de arrays: C[i, j] es INCORRECTO, usar C[i][j]
+❌ NUNCA declarar rangos con comas: C[1..n, 1..p] es INCORRECTO
+❌ NUNCA usar A[i, k] o B[k, j], siempre usar A[i][k] y B[k][j]
 """
 
 
