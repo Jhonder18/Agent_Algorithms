@@ -22,8 +22,24 @@ Devuelve SOLO JSON válido, con expresiones algebraicas simples (usa ** para pot
 
 def solve_node(state: AnalyzerState) -> Dict[str, Any]:
     costs_json = state.get("costs") or {}
-    user = f"COSTS JSON:\n{costs_json}"
-    sol = llm_json_call(SOLVE_SYS, user, temperature=0)
+    costs_ok = bool(costs_json.get("success"))
+
+    if not costs_ok:
+        error_msg = costs_json.get("error") or "Costos no disponibles para resolver complejidad"
+        sol = {
+            "steps": [],
+            "steps_by_line": [],
+            "exact": {"best": "N/A", "avg": "N/A", "worst": "N/A"},
+            "big_o": {"best": "N/A", "avg": "N/A", "worst": "N/A"},
+            "bounds": {"omega": "N/A", "theta": "N/A", "big_o": "N/A"},
+            "success": False,
+            "error": error_msg,
+        }
+    else:
+        user = f"COSTS JSON:\n{costs_json}"
+        sol = llm_json_call(SOLVE_SYS, user, temperature=0)
+        sol["success"] = True
+        sol.setdefault("error", None)
 
     validation = state.get("validation") or {}
     ast_meta = (state.get("ast") or {}).get("metadata") or {}

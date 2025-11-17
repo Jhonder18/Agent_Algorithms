@@ -22,13 +22,9 @@ Este proyecto contiene agentes y algoritmos desarrollados en Python.
 3. Instala las dependencias:
    ```bash
    uv venv
-   uv pip install -r pyproject.toml
-   uv pip install -r uv.lock
-   ```
-   O simplemente:
-   ```bash
    uv pip install
    ```
+   (Si necesitas reproducir exactamente las versiones de `uv.lock`, puedes usar `uv sync`.)
 
 4. Activa el entorno virtual:
    - En Windows:

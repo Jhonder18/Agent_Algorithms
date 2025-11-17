@@ -41,9 +41,30 @@ Devuelve SOLO JSON válido.
 
 
 def costs_node(state: AnalyzerState) -> Dict[str, Any]:
-    ast_json = state.get("ast") or {}
-    user = f"AST JSON:\n{ast_json}"
+    ast_payload = state.get("ast") or {}
+    ast_ok = bool(ast_payload.get("success") and ast_payload.get("ast"))
+
+    if not ast_ok:
+        error_msg = ast_payload.get("error") or "AST no disponible para calcular costos"
+        empty_costs = {
+            "per_node": [],
+            "per_line": [],
+            "total": {"best": "N/A", "avg": "N/A", "worst": "N/A"},
+            "success": False,
+            "error": error_msg,
+        }
+        meta_updates = update_metadata(
+            state,
+            costs_nodes=0,
+            costs_lines=0,
+            costs_error=error_msg,
+        )
+        return {"costs": empty_costs, **meta_updates}
+
+    user = f"AST JSON:\n{ast_payload}"
     data = llm_json_call(COSTS_SYS, user, temperature=0)
+    data["success"] = True
+    data.setdefault("error", None)
 
     per_node = data.get("per_node") or []
     per_line = data.get("per_line") or []

@@ -30,11 +30,15 @@ def _simple_normalize(code: str) -> Tuple[str, List[str]]:
     for kw in [
         "BEGIN", "END", "FOR", "WHILE", "IF", "ELSE",
         "REPEAT", "UNTIL", "RETURN", "AND", "OR",
-        "NOT", "DO", "THEN", "CALL", "PROCEDIMIENTO",
+        "NOT", "DO", "THEN", "PROCEDIMIENTO",
     ]:
         if kw in new:
             new = re.sub(rf"\b{kw}\b", kw.lower(), new)
             changes.append(f"Lowercase de '{kw}'")
+
+    if re.search(r"\bcall\b", new, flags=re.I):
+        new = re.sub(r"\bcall\b", "CALL", new, flags=re.I)
+        changes.append("Normalización de 'CALL' a mayúsculas")
 
     # Newline final
     if not new.endswith("\n"):
@@ -42,6 +46,24 @@ def _simple_normalize(code: str) -> Tuple[str, List[str]]:
         changes.append("Nueva línea añadida al final")
 
     return new, changes
+
+
+def _ensure_balanced_blocks(code: str) -> Tuple[str, List[str]]:
+    """
+    Asegura que exista el mismo número de 'begin' y 'end' añadiendo los que falten
+    al final del pseudocódigo. No intenta remover 'end' extra.
+    """
+    notes: List[str] = []
+    begins = len(re.findall(r"\bbegin\b", code, flags=re.I))
+    ends = len(re.findall(r"\bend\b", code, flags=re.I))
+
+    if begins > ends:
+        missing = begins - ends
+        addition = "\n".join("end" for _ in range(missing))
+        code = code.rstrip() + "\n" + addition + "\n"
+        notes.append(f"Se añadieron {missing} 'end' faltantes al final")
+
+    return code, notes
 
 
 # ---------------------------
@@ -178,6 +200,8 @@ def validate_node(state: AnalyzerState) -> Dict[str, Any]:
 
     # 1) Normalización barata
     code, normalizaciones = _simple_normalize(raw_code)
+    code, balance_notes = _ensure_balanced_blocks(code)
+    normalizaciones.extend(balance_notes)
 
     # 2) Lark
     parser_ok, parse_error = _parse_with_lark(code)
@@ -187,6 +211,8 @@ def validate_node(state: AnalyzerState) -> Dict[str, Any]:
     if not parser_ok and REPAIR_MODE == "llm" and parse_error:
         fixed = _repair_with_llm(code, parse_error)
         if fixed != code:
+            fixed, post_balance_notes = _ensure_balanced_blocks(fixed)
+            normalizaciones.extend(post_balance_notes)
             ok2, err2 = _parse_with_lark(fixed)
             if ok2:
                 desc = _summarize_fix_with_llm(raw_code, fixed)
