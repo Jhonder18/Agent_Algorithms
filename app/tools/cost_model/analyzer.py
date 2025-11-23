@@ -5,7 +5,7 @@ from sympy import sympify, simplify
 
 from app.tools.ast_parser.ast_nodes import (
     Program, Function, Block, Stmt,
-    For, While, If, Assign, Return, ExprStmt,
+    For, While, If, Assign, Return, ExprStmt, CallStatement,
     Expr, Var, Literal, BinOp, Compare, ArrayAccess
 )
 
@@ -123,9 +123,16 @@ class CostAnalyzer:
     def analyze(self, program: Program, source_code: str = "") -> CostsOut:
         self.context = CostContext()
         self.costs = []  # Resetear la lista de nodos
-        _ = self._analyze_program(program)
+        program_cost = self._analyze_program(program)
         per_line = self._generate_line_costs(source_code) if source_code else []
-        total = self._sum_from_lines(per_line) if per_line else CostExpr(best="0", avg="0", worst="0")
+        # Si no hay source_code, usar el costo del programa directamente
+        total = self._sum_from_lines(per_line) if per_line else program_cost
+        # Simplificar los costos finales
+        total = CostExpr(
+            best=self._simplify_expr(total.best),
+            avg=self._simplify_expr(total.avg),
+            worst=self._simplify_expr(total.worst)
+        )
         return CostsOut(per_node=[], per_line=per_line, total=total)
 
     def _analyze_program(self, program: Program) -> CostExpr:
@@ -148,6 +155,7 @@ class CostAnalyzer:
         if isinstance(stmt, If):     return self._analyze_if(stmt)
         if isinstance(stmt, Assign): return self._analyze_assign(stmt)
         if isinstance(stmt, Return): return CostExpr(best="1", avg="1", worst="1")
+        if isinstance(stmt, CallStatement): return self._analyze_call(stmt)
         if isinstance(stmt, ExprStmt): return self._analyze_expr_stmt(stmt)
         return CostExpr(best="1", avg="1", worst="1")
 
@@ -299,6 +307,47 @@ class CostAnalyzer:
             own_cost=cost,
             line_start=getattr(assign, 'line_start', None),
             line_end=getattr(assign, 'line_end', None)
+        )
+        self.costs.append(node)
+        
+        return cost
+    
+    def _analyze_call(self, call: CallStatement) -> CostExpr:
+        """
+        Estima el costo de una llamada a función.
+        Heurística: si la función recibe argumentos que representan rangos (left, right, etc.),
+        asumimos que el costo es proporcional al tamaño del rango (n).
+        """
+        # Convertir argumentos a strings para análisis
+        args_str = [self._expr_to_str(arg) for arg in call.args]
+        
+        # Detectar si hay argumentos que indican rango (left/right, inicio/fin, etc.)
+        range_indicators = ['left', 'right', 'inicio', 'fin', 'izq', 'der', 'start', 'end']
+        has_range = any(any(indicator in arg.lower() for indicator in range_indicators) for arg in args_str)
+        
+        # Detectar si hay array como primer argumento (común en merge, partition, etc.)
+        has_array = len(args_str) > 0 and (args_str[0] in ['A', 'arr', 'array', 'lista'])
+        
+        # Si tiene array + rango, asumir costo O(n)
+        if has_array and has_range:
+            # El costo es proporcional al tamaño del rango
+            # Usar 'n' como variable simbólica para el tamaño
+            cost = CostExpr(best="n", avg="n", worst="n")
+        elif has_array:
+            # Si solo tiene array, puede ser O(n)
+            cost = CostExpr(best="n", avg="n", worst="n")
+        else:
+            # Por defecto, asumir costo constante
+            cost = CostExpr(best="1", avg="1", worst="1")
+        
+        # Guardar nodo para _generate_line_costs
+        node = NodeCost(
+            node_id=self.context.next_id("call"),
+            node_type="CallStatement",
+            cost=cost,
+            own_cost=cost,
+            line_start=getattr(call, 'line_start', None),
+            line_end=getattr(call, 'line_end', None)
         )
         self.costs.append(node)
         

@@ -13,10 +13,14 @@ class AnalyzerState(TypedDict, total=False):
     input_text: str        # Descripción NL o pseudocódigo directo
     pseudocode: str        # Pseudocódigo normalizado/corregido
 
+    # Routing de complejidad
+    mode: str              # 'iterative' o 'recursive'
+
     # Resultados intermedios
     validation: Dict[str, Any]
     ast: Dict[str, Any]
-    costs: Dict[str, Any]
+    costs: Dict[str, Any]         # Para flujo iterativo
+    recurrence: Dict[str, Any]    # Para flujo recursivo
     solution: Dict[str, Any]
 
     # Resultado agregado
