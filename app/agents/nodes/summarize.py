@@ -20,6 +20,8 @@ def summarize_node(state: AnalyzerState) -> Dict[str, Any]:
     ast_data = state.get("ast", {})
     costs = state.get("costs", {})
     solution = state.get("solution")
+    validation = state.get("validation", {})
+    metadata = state.get("metadata", {})
     
     # Validar que solution existe
     if not solution or not isinstance(solution, dict):
@@ -57,8 +59,21 @@ COSTOS EXACTOS:
         {"role": "user", "content": context},
     ]
     summary = llm.invoke(msgs).content.strip()
+    
+    # Construir result completo con toda la información
+    result = {
+        "algorithm_name": algorithm_name,
+        "pseudocode": pseudocode,
+        "validation": validation,
+        "ast": ast_data,
+        "costs": costs,
+        "solution": solution,
+        "summary": summary,
+        "metadata": metadata,
+    }
+    
     meta_fragment = update_metadata(state, has_summary=True)
-    return {"summary": summary, **meta_fragment}
+    return {"summary": summary, "result": result, **meta_fragment}
 
 
 __all__ = ["summarize_node"]

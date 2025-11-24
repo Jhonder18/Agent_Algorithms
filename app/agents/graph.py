@@ -10,7 +10,7 @@ from langgraph.graph import StateGraph, START, END
 
 from app.agents.state import AnalyzerState
 
-from app.agents.nodes.normalize import normalize_node
+from app.agents.nodes.generate_pseudo import generate_pseudo_node
 from app.agents.nodes.validate import validate_node
 from app.agents.nodes.ast_tool_node import ast_node
 from app.agents.nodes.route_complexity import route_complexity_node
@@ -51,14 +51,38 @@ def _heuristic_router(state: AnalyzerState) -> str:
 
 
 def route_from_start(state: AnalyzerState) -> str:
+    """
+    Determina si el input es lenguaje natural (normalize) o pseudocódigo (validate).
+    Registra la decisión en metadata para trazabilidad.
+    """
+    decision = None
+    route_method = "heuristic"
+    
     if planner_decide is not None:
         try:
-            # Debe devolver exactamente "normalize" o "validate"
+            # El planner también establece metadata.input_type si decide "validate"
             decision = planner_decide(state)  # type: ignore[arg-type]
-            return "normalize" if decision == "normalize" else "validate"
+            route_method = "planner"
+            decision = "normalize" if decision == "normalize" else "validate"
         except Exception:
             pass
-    return _heuristic_router(state)
+    
+    if decision is None:
+        decision = _heuristic_router(state)
+        # Si usamos heurística y va a validate, establecer input_type
+        if decision == "validate":
+            if "metadata" not in state:
+                state["metadata"] = {}
+            state["metadata"]["input_type"] = "pseudocode"
+            state["metadata"]["detected_by"] = "heuristic"
+    
+    # Registrar decisión de ruteo en metadata inicial
+    if "metadata" not in state:
+        state["metadata"] = {}
+    state["metadata"]["initial_route"] = decision
+    state["metadata"]["route_method"] = route_method
+    
+    return decision
 
 
 # ---------------------------
@@ -83,7 +107,7 @@ def build_graph():
     g = StateGraph(AnalyzerState)
 
     # Registrar nodos
-    g.add_node("normalize", normalize_node)              # NL -> pseudocode
+    g.add_node("normalize", generate_pseudo_node)        # NL -> pseudocode (genera o normaliza)
     g.add_node("validate", validate_node)                # valida/corrige el pseudo
     g.add_node("ast", ast_node)                          # Tool determinística (Lark) -> AST dict
     g.add_node("route_complexity", route_complexity_node) # Detecta iterativo vs recursivo

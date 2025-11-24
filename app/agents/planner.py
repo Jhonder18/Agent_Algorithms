@@ -32,9 +32,14 @@ def planner_decide(state: AnalyzerState) -> Literal["normalize", "validate"]:
     Devuelve:
       - "normalize" si el INPUT es lenguaje natural (NL)
       - "validate" si el INPUT ya parece pseudocódigo
+    
+    IMPORTANTE: Establece metadata.input_type basándose en la decisión
+    para que validate_node sepa qué tipo de input recibió.
     """
     text = _get_raw_input_text(state)
     mode = os.getenv("PLANNER_MODE", "heuristic").lower()
+    
+    decision = None
 
     if mode == "llm" and get_llm is not None:
         llm = get_llm(temperature=0)
@@ -46,18 +51,26 @@ def planner_decide(state: AnalyzerState) -> Literal["normalize", "validate"]:
         )
         user = HumanMessage(content=f"INPUT:\n{text}")
         out = llm.invoke([sys, user]).content.strip().lower()
-        # fallback robusto por si el modelo devuelve otra cosa
-        return "validate" if "validate" in out else "normalize"
-
-    # Heurística rápida (sin LLM)
-    looks_pseudo = bool(
-        re.search(
-            r"\bbegin\b|\bend\b|←|->|\bfor\b|\bwhile\b|\bif\b|\brepeat\b|\buntil\b",
-            text,
-            flags=re.IGNORECASE,
+        decision = "validate" if "validate" in out else "normalize"
+    else:
+        # Heurística rápida (sin LLM)
+        looks_pseudo = bool(
+            re.search(
+                r"\bbegin\b|\bend\b|←|->|\bfor\b|\bwhile\b|\bif\b|\brepeat\b|\buntil\b",
+                text,
+                flags=re.IGNORECASE,
+            )
         )
-    )
-    return "validate" if looks_pseudo else "normalize"
+        decision = "validate" if looks_pseudo else "normalize"
+    
+    # Establecer input_type en metadata si va directo a validate
+    if decision == "validate":
+        if "metadata" not in state:
+            state["metadata"] = {}
+        state["metadata"]["input_type"] = "pseudocode"
+        state["metadata"]["detected_by"] = "planner"
+    
+    return decision
 
 
 __all__ = ["planner_decide"]

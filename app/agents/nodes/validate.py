@@ -1,69 +1,19 @@
 # app/agents/nodes/validate.py
+"""Nodo para validar y reparar pseudocódigo usando Lark parser y LLM."""
 from __future__ import annotations
 
 import os
 import re
 from typing import Any, Dict, List, Tuple
 
-from app.constants import ARROW
 from app.agents.state import AnalyzerState, update_metadata
 from app.tools.ast_parser.parser_agent import get_parser_agent
 from app.services.llm import get_llm, strip_code_fences
+from app.services.utils import quick_normalize, balance_begin_end, normalize_arrows, ensure_final_newline
+from app.prompts import load_prompt
 
 # Por defecto intentamos reparar con LLM si Lark falla
 REPAIR_MODE = os.getenv("VALIDATION_REPAIR_MODE", "llm").lower()
-
-
-# ---------------------------
-# Normalización barata
-# ---------------------------
-def _simple_normalize(code: str) -> Tuple[str, List[str]]:
-    changes: List[str] = []
-    new = code
-
-    # Flechas
-    if "->" in new or "←" in new:
-        new = new.replace("->", ARROW).replace("←", ARROW)
-        changes.append("Reemplazo de asignación por flecha")
-
-    # Palabras clave a minúscula
-    for kw in [
-        "BEGIN", "END", "FOR", "WHILE", "IF", "ELSE",
-        "REPEAT", "UNTIL", "RETURN", "AND", "OR",
-        "NOT", "DO", "THEN", "PROCEDIMIENTO",
-    ]:
-        if kw in new:
-            new = re.sub(rf"\b{kw}\b", kw.lower(), new)
-            changes.append(f"Lowercase de '{kw}'")
-
-    if re.search(r"\bcall\b", new, flags=re.I):
-        new = re.sub(r"\bcall\b", "CALL", new, flags=re.I)
-        changes.append("Normalización de 'CALL' a mayúsculas")
-
-    # Newline final
-    if not new.endswith("\n"):
-        new += "\n"
-        changes.append("Nueva línea añadida al final")
-
-    return new, changes
-
-
-def _ensure_balanced_blocks(code: str) -> Tuple[str, List[str]]:
-    """
-    Asegura que exista el mismo número de 'begin' y 'end' añadiendo los que falten
-    al final del pseudocódigo. No intenta remover 'end' extra.
-    """
-    notes: List[str] = []
-    begins = len(re.findall(r"\bbegin\b", code, flags=re.I))
-    ends = len(re.findall(r"\bend\b", code, flags=re.I))
-
-    if begins > ends:
-        missing = begins - ends
-        addition = "\n".join("end" for _ in range(missing))
-        code = code.rstrip() + "\n" + addition + "\n"
-        notes.append(f"Se añadieron {missing} 'end' faltantes al final")
-
-    return code, notes
 
 
 # ---------------------------
@@ -81,19 +31,6 @@ def _parse_with_lark(code: str) -> Tuple[bool, str | None]:
 # ---------------------------
 # Reparar con LLM + gramática
 # ---------------------------
-REPAIR_SYS_BASE = f"""
-Eres un asistente que CORRIGE pseudocódigo de ADA para que sea válido
-según la gramática del proyecto (WHILE, FOR, REPEAT, IF/THEN/ELSE, CALL, etc.).
-
-Reglas IMPORTANTES:
-- Usa SIEMPRE la flecha {ARROW} para asignaciones.
-- Cierra TODOS los bloques con 'begin' ... 'end'.
-- Respeta la estructura original del algoritmo: no inventes pasos nuevos.
-- Puedes añadir 'begin/end', paréntesis, 'then', 'do', etc. si son necesarios.
-- Usa SOLO (if, then, else, for, while, repeat, until, do, to, begin, end).
-- No agregues comentarios ni explicaciones.
-- Devuelve SOLO el pseudocódigo corregido, sin ``` ni markdown.
-"""
 
 
 def _repair_with_llm(code: str, parse_error: str) -> str:
@@ -113,7 +50,7 @@ def _repair_with_llm(code: str, parse_error: str) -> str:
     except Exception:
         pass
 
-    sys_content = REPAIR_SYS_BASE
+    sys_content = load_prompt("repair")
     if grammar:
         sys_content += "\n\nGRAMÁTICA LARK DEL PROYECTO:\n" + grammar
 
@@ -132,9 +69,8 @@ def _repair_with_llm(code: str, parse_error: str) -> str:
         },
     ]
     out = strip_code_fences(llm.invoke(msgs).content).strip()
-    out = out.replace("->", ARROW).replace("←", ARROW).strip()
-    if not out.endswith("\n"):
-        out += "\n"
+    out = normalize_arrows(out).strip()
+    out = ensure_final_newline(out)
     return out
 
 
@@ -176,32 +112,37 @@ def validate_node(state: AnalyzerState) -> Dict[str, Any]:
     # Si pseudocode está vacío pero input_text tiene seudocódigo, usarlo
     raw_code = (state.get("pseudocode") or state.get("input_text") or state.get("text") or "").strip()
 
+    # Determinar input_type: si NO pasó por generate_pseudo_node, lo estableció el planner
+    existing_metadata = state.get("metadata") or {}
+    existing_input_type = existing_metadata.get("input_type", "pseudocode")
+
     if not raw_code:
         validation = {
             "era_algoritmo_valido": False,
             "codigo_corregido": "",
             "errores": ["Pseudocódigo vacío"],
             "normalizaciones": [],
+            "repaired_with_llm": False,
             "hints": {
                 "parser_engine": "lark-lalr",
                 "language_hint": "es",
                 "code_length": 0,
                 "line_count": 0,
-                "repaired_with_llm": False,
             },
         }
         meta_updates = update_metadata(
             state,
-            input_type=(state.get("metadata") or {}).get("input_type", "pseudocode"),
+            input_type=existing_input_type,
             used_lark_validation=False,
+            repaired_with_llm=False,
         )
         return {"validation": validation, "pseudocode": "", **meta_updates}
 
     era_algo = bool(re.search(r"\bbegin\b.*\bend\b", raw_code, flags=re.I | re.S))
 
     # 1) Normalización barata
-    code, normalizaciones = _simple_normalize(raw_code)
-    code, balance_notes = _ensure_balanced_blocks(code)
+    code, normalizaciones = quick_normalize(raw_code)
+    code, balance_notes = balance_begin_end(code)
     normalizaciones.extend(balance_notes)
 
     # 2) Lark
@@ -212,7 +153,7 @@ def validate_node(state: AnalyzerState) -> Dict[str, Any]:
     if not parser_ok and REPAIR_MODE == "llm" and parse_error:
         fixed = _repair_with_llm(code, parse_error)
         if fixed != code:
-            fixed, post_balance_notes = _ensure_balanced_blocks(fixed)
+            fixed, post_balance_notes = balance_begin_end(fixed)
             normalizaciones.extend(post_balance_notes)
             ok2, err2 = _parse_with_lark(fixed)
             if ok2:
@@ -240,7 +181,6 @@ def validate_node(state: AnalyzerState) -> Dict[str, Any]:
         "language_hint": "es",
         "code_length": len(code),
         "line_count": code.count("\n"),
-        "repaired_with_llm": repaired_with_llm,
     }
 
     validation = {
@@ -249,13 +189,16 @@ def validate_node(state: AnalyzerState) -> Dict[str, Any]:
         "codigo_corregido": code,
         "errores": errores,
         "normalizaciones": normalizaciones,
+        "repaired_with_llm": repaired_with_llm,
         "hints": hints,
     }
 
     meta_updates = update_metadata(
         state,
-        input_type=(state.get("metadata") or {}).get("input_type", "pseudocode"),
+        input_type=existing_input_type,
         used_lark_validation=True,
+        lark_parser_ok=parser_ok,
+        repaired_with_llm=repaired_with_llm,
     )
 
     return {
