@@ -33,6 +33,12 @@ class ArrayAccess(Expr):
         return {"type": "ArrayAccess", "array": arr, "index": self.index.to_dict()}
 
 @dataclass
+class ArrayLiteral(Expr):
+    elements: List[Expr] = field(default_factory=list)
+    def to_dict(self) -> Dict[str, Any]:
+        return {"type": "ArrayLiteral", "elements": [el.to_dict() for el in self.elements]}
+
+@dataclass
 class BinOp(Expr):
     op: str = "+"
     left: Expr = field(default_factory=Literal)
@@ -101,6 +107,32 @@ class ExprStmt(Stmt):
     def to_dict(self) -> Dict[str, Any]:
         out = super().to_dict()
         out["expr"] = self.expr.to_dict()
+        return out
+
+@dataclass
+class VarDeclaration(Stmt):
+    names: List[str] = field(default_factory=list)
+    def to_dict(self) -> Dict[str, Any]:
+        out = super().to_dict()
+        out["names"] = self.names
+        return out
+
+@dataclass
+class CallStatement(Stmt):
+    name: str = ""
+    args: List[Expr] = field(default_factory=list)
+    def to_dict(self) -> Dict[str, Any]:
+        out = super().to_dict()
+        out["name"] = self.name
+        out["args"] = [arg.to_dict() for arg in self.args]
+        return out
+
+@dataclass
+class ActionStatement(Stmt):
+    action: str = "accion"
+    def to_dict(self) -> Dict[str, Any]:
+        out = super().to_dict()
+        out["action"] = self.action
         return out
 
 @dataclass
@@ -180,7 +212,10 @@ class Program:
 
 
 __all__ = [
-    "Expr", "Literal", "Var", "ArrayAccess", "BinOp", "UnOp", "Compare", "Call",
-    "Stmt", "Assign", "Return", "ExprStmt", "Block", "If", "While", "For",
+    "Expr", "Literal", "Var", "ArrayAccess", "ArrayLiteral",
+    "BinOp", "UnOp", "Compare", "Call",
+    "Stmt", "Assign", "Return", "ExprStmt", "VarDeclaration",
+    "CallStatement", "ActionStatement",
+    "Block", "If", "While", "For",
     "Param", "Function", "Program",
 ]

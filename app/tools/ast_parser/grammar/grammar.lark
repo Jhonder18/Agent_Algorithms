@@ -70,7 +70,7 @@ else_part: "begin" statement* "end" | statement
 // Asignación y llamadas
 assignment: lvalue "🡨" expression
 
-lvalue: NAME "[" expression "]"
+lvalue: NAME "[" expression "]" ("[" expression "]")*
       | NAME "." NAME
       | NAME
 

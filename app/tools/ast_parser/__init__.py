@@ -1,6 +1,6 @@
 from typing import List
 from langchain_core.tools import BaseTool
-from .ast_parser import build_ast
+from .ast_parser import ast_parse_lc
 
 def create_toolkit() -> List[BaseTool]:
-    return [build_ast]
+    return [ast_parse_lc]
