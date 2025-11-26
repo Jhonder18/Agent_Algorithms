@@ -1,50 +1,28 @@
 # app/agents/state.py
-from __future__ import annotations
-from typing import TypedDict, Dict, Any
+from typing import TypedDict, Annotated, Literal, Dict, Any, Optional
 
+class SolutionState(TypedDict):
+    big_O_temporal: Annotated[str, "Notación Big-O temporal"]
+    big_O_espacial: Annotated[str, "Notación Big-O espacial"]
+    big_Theta_temporal: Annotated[str, "Notación Big-Theta temporal"]
+    big_Theta_espacial: Annotated[str, "Notación Big-Theta espacial"]
+    big_Omega_temporal: Annotated[str, "Notación Big-Omega temporal"]
+    big_Omega_espacial: Annotated[str, "Notación Big-Omega espacial"]
 
 class AnalyzerState(TypedDict, total=False):
-    """
-    Estado compartido en todo el grafo de LangGraph.
-    Todas las nodes leen/escriben sobre este shape.
-    """
 
     # Entrada
-    input_text: str        # Descripción NL o pseudocódigo directo
-    pseudocode: str        # Pseudocódigo normalizado/corregido
+    nl_description: Annotated[str, "Descripción NL o pseudocódigo directo"]
+    pseudocode: Annotated[str, "Pseudocódigo normalizado/corregido"]
 
     # Routing de complejidad
-    mode: str              # 'iterative' o 'recursive'
-
+    mode: Annotated[Literal["iterative", "recursive"], "'iterative' o 'recursive'"]
+    ast: Annotated[Dict[str, Any], "Árbol sintáctico abstracto"]
+    sumatoria: Annotated[str, "Expresión de sumatoria para flujo iterativo/recursivo"]
     # Resultados intermedios
-    validation: Dict[str, Any]
-    ast: Dict[str, Any]
-    costs: Dict[str, Any]         # Para flujo iterativo
-    recurrence: Dict[str, Any]    # Para flujo recursivo
-    solution: Dict[str, Any]
-
+    validation: Optional[Annotated[Dict[str, Any], "Validación del pseudocódigo"]]
+    recurrence: Annotated[Dict[str, Any], "Ecuaciones de recurrencias para flujo recursivo"]
+    solution: Annotated[SolutionState, "Solución del análisis"]
     # Resultado agregado
-    result: Dict[str, Any]
-    summary: str
-
-    # Metadata global del pipeline
-    metadata: Dict[str, Any]
-
-
-def update_metadata(state: "AnalyzerState", **changes: Any) -> Dict[str, Any]:
-    """
-    Helper para nodos: fusiona metadata existente con cambios y devuelve un
-    fragmento de estado listo para mergear en el grafo.
-
-    Ejemplo:
-        return {
-            "pseudocode": code,
-            **update_metadata(state, input_type="natural_language")
-        }
-    """
-    meta: Dict[str, Any] = dict(state.get("metadata") or {})
-    meta.update(changes)
-    return {"metadata": meta}
-
-
-__all__ = ["AnalyzerState", "update_metadata"]
+    result: Annotated[Dict[str, Any], "Resultado en NL agregado del análisis"]
+    summary: Annotated[str, "Resumen del análisis"]
