@@ -1,5 +1,4 @@
 from app.agents.llms.gemini import get_gemini_model
-from collections.abc import Callable
 from langchain_core.language_models import (
     LanguageModelInput,
 )
@@ -9,14 +8,10 @@ from langgraph.prebuilt import ToolNode
 
 
 def get_gemini_with_tools_model(
-    tools: list[Callable],
+    tools: list,
 ) -> Runnable[LanguageModelInput, AIMessage]:
     model = get_gemini_model()
-    gemini_with_tools = model.bind_tools(tools)
+    gemini_with_tools = model.bind_tools(tools, tool_choice='any')
     return gemini_with_tools
 
-
-def get_gemini_tool_model(tools: list[Callable], name: str) -> ToolNode:
-    tools_node = ToolNode(tools, name=name)
-    return tools_node
     

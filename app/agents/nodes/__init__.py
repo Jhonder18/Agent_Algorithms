@@ -9,7 +9,7 @@ from app.agents.nodes.costs import costs_node
 from app.agents.nodes.solve import solve_node
 from app.agents.nodes.recurrence import recurrence_node
 from app.agents.nodes.solve_recursive import solve_recursive_node
-from app.agents.nodes.summarize import summarize_node
+from app.agents.nodes.result import summarize_node
 
 __all__ = [
     "generate_pseudo_node",

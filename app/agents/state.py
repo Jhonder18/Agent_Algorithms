@@ -25,4 +25,3 @@ class AnalyzerState(TypedDict, total=False):
     solution: Annotated[SolutionState, "Solución del análisis"]
     # Resultado agregado
     result: Annotated[Dict[str, Any], "Resultado en NL agregado del análisis"]
-    summary: Annotated[str, "Resumen del análisis"]
