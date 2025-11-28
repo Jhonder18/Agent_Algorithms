@@ -23,7 +23,7 @@ def ParseCode(state: AnalyzerState) -> AnalyzerState:
     """
     gemini = get_gemini_model()
     PROMPT = ""
-    with open("app/agents/prompt_templates/normalize_state.txt", "r") as f:
+    with open("./app/agents/prompts/NL_TO_CODE.md", "r") as f:
         PROMPT = f.read()
     system_message = SystemMessage(content=PROMPT)
     human_message = HumanMessage(content=state["nl_description"]) # type: ignore
