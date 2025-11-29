@@ -5,13 +5,15 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-"google-genai",
-"python-dotenv",
-"sympy",
-"lark",
-"langchain",
-"langchain-google-genai",
-"langgraph",
-"langsmith",
-"fastapi[standard]"
+    "google-genai",
+    "python-dotenv",
+    "sympy",
+    "lark",
+    "langchain",
+    "langchain-google-genai",
+    "langgraph",
+    "langsmith",
+    "fastapi[standard]",
+    "matplotlib>=3.10.7",
+    "ipython>=9.7.0",
 ]

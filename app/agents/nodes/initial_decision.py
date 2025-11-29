@@ -15,21 +15,20 @@ class typeInput(BaseModel):
     )
 
 
-def decision(input: str) -> AnalyzerState:
+def initial_decision_node(state: AnalyzerState) -> AnalyzerState:
     """
     Decide si el input es en lenguaje natural o pseudocódigo.
     """
     gemini = get_gemini_model()
     PROMPT = "Diga si el siguiente texto es pseudocódigo o lenguaje natural. Responda solo con 'lenguaje_natural' o 'pseudocódigo'"
     system_message = SystemMessage(content=PROMPT)
-    human_message = HumanMessage(content=input)
+    human_message = HumanMessage(content=state["nl_description"])  # type: ignore
     llm_structured_output = gemini.with_structured_output(typeInput)
     response = llm_structured_output.invoke([system_message, human_message])
-    state: AnalyzerState = {}
     if response.type_input == "pseudocódigo":  # type: ignore
-        state["pseudocode"] = input
+        state["pseudocode"] = state # type: ignore
         state["nl_description"] = ""
     else:
-        state["nl_description"] = input
+        state["nl_description"] = state # type: ignore
         state["pseudocode"] = ""
     return state

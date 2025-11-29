@@ -2,7 +2,7 @@ from app.agents.llms.gemini import get_gemini_model
 from langchain_core.messages import SystemMessage, HumanMessage
 from app.agents.state import AnalyzerState
 
-def result(state: AnalyzerState) -> AnalyzerState:
+def result_node(state: AnalyzerState) -> AnalyzerState:
     """
     Genera un resumen en lenguaje natural del análisis realizado.
     """

@@ -1,98 +1,70 @@
-# app/agents/graph.py
-from __future__ import annotations
-from typing import Any
-
-from dotenv import load_dotenv
-
-load_dotenv()
-
+from app.agents.nodes import *
+from app.agents.state import AnalyzerState
 from langgraph.graph import StateGraph, START, END
 
-from app.agents.state import AnalyzerState
 
-from app.agents.nodes.generate_pseudo import generate_pseudo_node
-from app.agents.nodes.validate import validate_node
-from app.agents.nodes.ast_node import ast_node
-from app.agents.nodes.route_complexity import route_complexity_node
-from app.agents.nodes.costs import costs_node
-from app.agents.nodes.solve import solve_node
-from app.agents.nodes.recurrence import recurrence_node
-from app.agents.nodes.solve_recursive import solve_recursive_node
-from app.agents.nodes.result import summarize_node
-
-
-
-# ---------------------------
-# Router para bifurcar iterativo vs recursivo
-# ---------------------------
-def route_by_mode(state: AnalyzerState) -> str:
-    """
-    Determina el siguiente nodo según el modo:
-    - 'iterative' -> costs (flujo actual)
-    - 'recursive' -> recurrence (flujo recursivo)
-    """
-    mode = state.get("mode", "iterative")
-    if mode == "recursive":
-        return "recurrence"
-    return "costs"
+def create_nodes(graph: StateGraph[AnalyzerState]) -> StateGraph[AnalyzerState]:
+    graph.add_node("decicion_node", initial_decision_node)
+    graph.add_node("code_description", code_description_node)
+    graph.add_node("parse_code", parse_code_node)
+    graph.add_node("generate_ast", generate_ast_node)
+    graph.add_node("calcular_costo_espacial_iterativo", costo_espacial_iterativo_node)
+    graph.add_node("calcular_costo_temporal_iterativo", costo_temporal_iterativo_node)
+    graph.add_node("calcular_costo_espacial_recursivo", recusive_espacial_node)
+    graph.add_node("calcular_costo_temporal_recursivo", recusive_temporal_node)
+    graph.add_node("preparacion_resultado", result_node)
+    return graph
 
 
-# ---------------------------
-# Ensamblador del grafo
-# ---------------------------
-def build_graph():
-    g = StateGraph(AnalyzerState)
+def create_edges(graph: StateGraph[AnalyzerState]) -> StateGraph[AnalyzerState]:
+    graph.add_edge(START, "decicion_node")
+    # recibe codigo o nl?
+    def is_pseudocode(state: AnalyzerState) -> bool:
+        return state.get("pseudocode") != ""
 
-    # Registrar nodos
-    g.add_node("normalize", generate_pseudo_node)        # NL -> pseudocode (genera o normaliza)
-    g.add_node("validate", validate_node)                # valida/corrige el pseudo
-    
-    
-    g.add_node("ast", ast_node)                          # Cambiar por el AST mas sencillo
-    #g.add_node("route_complexity", route_complexity_node) # Detecta iterativo vs recursivo
-    
-    # Simplificar
-    g.add_node("costs", costs_node)                      # Costos por nodo/línea y totales
-    g.add_node("solve", solve_node)                      # Exact, Big-O, bounds, etc.
-    
-    # Await
-    g.add_node("recurrence", recurrence_node)            # Construye relación de recurrencia
-    g.add_node("solve_recursive", solve_recursive_node)  # Resuelve recurrencia
-    
-    # Nodo común final
-    g.add_node("summarize", summarize_node)              # Texto final (opcional)
-
-    # Ruteo inicial: START -> normalize | validate
-    g.add_conditional_edges(
-        START,
-        route_from_start,
-        {"normalize": "normalize", "validate": "validate"},
-    )
-
-    # Flujo común inicial
-    g.add_edge("normalize", "validate")
-    g.add_edge("validate", "ast")
-    g.add_edge("ast", "route_complexity")
-    
-    # Bifurcación según tipo de algoritmo
-    g.add_conditional_edges(
-        "route_complexity",
-        route_by_mode,
+    graph.add_conditional_edges(
+        "decicion_node",
+        is_pseudocode,
         {
-            "costs": "costs",           # Flujo iterativo
-            "recurrence": "recurrence"  # Flujo recursivo
-        }
+            True: "code_description",
+            False: "parse_code",
+        },
     )
-    
-    # Rama iterativa (flujo existente)
-    g.add_edge("costs", "solve")
-    g.add_edge("solve", "summarize")
-    
-    # Rama recursiva (flujo nuevo)
-    g.add_edge("recurrence", "solve_recursive")
-    g.add_edge("solve_recursive", "summarize")
-    
-    # Salida común
-    g.add_edge("summarize", END)
 
-    return g.compile()
+    graph.add_edge("code_description", "generate_ast")
+    graph.add_edge("parse_code", "generate_ast")
+
+    # estatico o iterativo?
+    def is_iterative(state: AnalyzerState) -> bool:
+        return state.get("mode") == "iterativo"
+
+    graph.add_conditional_edges(
+        "generate_ast",
+        is_iterative,
+        {
+            True: "calcular_costo_temporal_iterativo",
+            False: "calcular_costo_temporal_recursivo",
+        },
+    )
+
+    graph.add_edge(
+        "calcular_costo_temporal_iterativo", "calcular_costo_espacial_iterativo"
+    )
+    graph.add_edge("calcular_costo_espacial_iterativo", "preparacion_resultado")
+
+    graph.add_edge(
+        "calcular_costo_temporal_recursivo", "calcular_costo_espacial_recursivo"
+    )
+    graph.add_edge("calcular_costo_espacial_recursivo", "preparacion_resultado")
+
+    graph.add_edge("preparacion_resultado", END)
+    return graph
+
+
+def build_graph() -> StateGraph[AnalyzerState]:
+    graph = StateGraph(AnalyzerState)
+
+    graph = create_nodes(graph)
+    graph = create_edges(graph) 
+
+    return graph

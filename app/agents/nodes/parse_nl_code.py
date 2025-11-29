@@ -16,7 +16,7 @@ class ParceCode(BaseModel):
     )
 
 
-def ParseCode(state: AnalyzerState) -> AnalyzerState:
+def parse_code_node(state: AnalyzerState) -> AnalyzerState:
     """
     Normaliza el estado del analizador asegurando que todas las claves esperadas estén presentes.
     Si alguna clave falta, se inicializa con un valor predeterminado.

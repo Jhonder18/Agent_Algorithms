@@ -22,7 +22,7 @@ class ASTOutput(BaseModel):
     ast: List[Dict[str, FunctionStructure]]
 
 
-def generate_ast(state: AnalyzerState) -> AnalyzerState:
+def generate_ast_node(state: AnalyzerState) -> AnalyzerState:
     """Genera el AST a partir del pseudocódigo normalizado en el estado."""
     system_prompt = ""
     # Leer el prompt del sistema

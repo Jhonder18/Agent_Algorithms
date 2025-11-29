@@ -3,7 +3,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from app.agents.state import AnalyzerState
 from app.agents.llms.geminiWithTools import get_gemini_with_tools_model
 
-def calcular_costo_temporal(state: AnalyzerState) -> AnalyzerState:
+def costo_espacial_iterativo_node(state: AnalyzerState) -> AnalyzerState:
     """
     Calcula la sumatoria dada y retorna su resultado simplificado
     """
