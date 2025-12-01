@@ -18,10 +18,11 @@ def costo_temporal_iterativo_node(state: AnalyzerState) -> AnalyzerState:
         "ast": state["ast"], # type: ignore
         "sumatoria": state["sumatoria"] # type: ignore
     }
+    print(f"\n\n\n{context}\n\n\n")
     for prompt in prompts:
         gemini = get_gemini_with_tools_model([resolver_sumatorias])
         system_message = SystemMessage(content=prompt)
-        human_message = HumanMessage(content="Calcule la complejidad temporal de esto: {code}\n\nAST: {ast}\n\nSumatoria: {sumatoria}".format(**context))
+        human_message = HumanMessage(content=f"Calcule la complejidad temporal de esto: {context['code']}\n\nAST: {context['ast']}\n\nSumatoria: {context['sumatoria']}")
         messages = [system_message, human_message]
         result = str(gemini.invoke(messages).content)
         if "CASO_PROMEDIO" in prompt:

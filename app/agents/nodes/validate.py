@@ -2,32 +2,17 @@
 """Nodo para validar y reparar pseudocódigo usando Lark parser y LLM."""
 from __future__ import annotations
 
-import os
-import re
-from typing import Any, Dict, List, Tuple
+# import os
+# import re
+# from typing import Any, Dict, List, Tuple
 
-from app.agents.state import AnalyzerState, update_metadata
+from app.agents.state import AnalyzerState
 from app.tools.ast_parser.parser_agent import get_parser_agent
 from app.services.llm import get_llm, strip_code_fences
-from app.services.utils import quick_normalize, balance_begin_end, normalize_arrows, ensure_final_newline
-from app.prompts import load_prompt
+# from app.services.utils import quick_normalize, balance_begin_end, normalize_arrows, ensure_final_newline
 
 # Por defecto intentamos reparar con LLM si Lark falla
 REPAIR_MODE = os.getenv("VALIDATION_REPAIR_MODE", "llm").lower()
-
-
-# ---------------------------
-# Validar con Lark
-# ---------------------------
-def _parse_with_lark(code: str) -> Tuple[bool, str | None]:
-    agent = get_parser_agent()
-    try:
-        agent.parser.parse(code)
-        return True, None
-    except Exception as e:
-        return False, str(e)
-
-
 # ---------------------------
 # Reparar con LLM + gramática
 # ---------------------------
@@ -74,31 +59,31 @@ def _repair_with_llm(code: str, parse_error: str) -> str:
     return out
 
 
-def _summarize_fix_with_llm(original: str, fixed: str) -> str:
-    """Descripción corta de qué se corrigió, para meterla en 'normalizaciones'."""
-    try:
-        llm = get_llm(temperature=0.0)
-    except Exception:
-        return ""
+# def _summarize_fix_with_llm(original: str, fixed: str) -> str:
+#     """Descripción corta de qué se corrigió, para meterla en 'normalizaciones'."""
+#     try:
+#         llm = get_llm(temperature=0.0)
+#     except Exception:
+#         return ""
 
-    sys_msg = (
-        "Resume en 1–2 líneas qué se corrigió entre el pseudocódigo ORIGINAL y el CORREGIDO "
-        "(ej: se agregaron begin/end, se normalizaron flechas, se ajustó sintaxis de for/while/if, etc.)."
-    )
-    msgs = [
-        {"role": "system", "content": sys_msg},
-        {
-            "role": "user",
-            "content": (
-                "ORIGINAL:\n"
-                f"{original}\n\n"
-                "CORREGIDO:\n"
-                f"{fixed}\n\n"
-                "RESPONDE SOLO CON UNA BREVE DESCRIPCIÓN:"
-            ),
-        },
-    ]
-    return llm.invoke(msgs).content.strip()
+#     sys_msg = (
+#         "Resume en 1–2 líneas qué se corrigió entre el pseudocódigo ORIGINAL y el CORREGIDO "
+#         "(ej: se agregaron begin/end, se normalizaron flechas, se ajustó sintaxis de for/while/if, etc.)."
+#     )
+#     msgs = [
+#         {"role": "system", "content": sys_msg},
+#         {
+#             "role": "user",
+#             "content": (
+#                 "ORIGINAL:\n"
+#                 f"{original}\n\n"
+#                 "CORREGIDO:\n"
+#                 f"{fixed}\n\n"
+#                 "RESPONDE SOLO CON UNA BREVE DESCRIPCIÓN:"
+#             ),
+#         },
+#     ]
+#     return llm.invoke(msgs).content.strip()
 
 
 # ---------------------------
@@ -141,7 +126,7 @@ def validate_node(state: AnalyzerState) -> Dict[str, Any]:
     era_algo = bool(re.search(r"\bbegin\b.*\bend\b", raw_code, flags=re.I | re.S))
 
     # 1) Normalización barata
-    code, normalizaciones = quick_normalize(raw_code)
+    # code, normalizaciones = quick_normalize(raw_code)
     code, balance_notes = balance_begin_end(code)
     normalizaciones.extend(balance_notes)
 
@@ -193,16 +178,16 @@ def validate_node(state: AnalyzerState) -> Dict[str, Any]:
         "hints": hints,
     }
 
-    meta_updates = update_metadata(
-        state,
-        input_type=existing_input_type,
-        used_lark_validation=True,
-        lark_parser_ok=parser_ok,
-        repaired_with_llm=repaired_with_llm,
-    )
+    # meta_updates = update_metadata(
+    #     state,
+    #     input_type=existing_input_type,
+    #     used_lark_validation=True,
+    #     lark_parser_ok=parser_ok,
+    #     repaired_with_llm=repaired_with_llm,
+    # )
 
     return {
-        "validation": validation,
+        # "validation": validation,
         "pseudocode": code,
         **meta_updates,
     }
