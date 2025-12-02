@@ -13,16 +13,14 @@ def costo_espacial_iterativo_node(state: AnalyzerState) -> AnalyzerState:
     for file in files:
         with open(file, "r") as f:
             prompts.append(f.read())
-    context = {
-        "code": state["pseudocode"], # type: ignore
-        "ast": state["ast"], # type: ignore
-    }
     for prompt in prompts:
         gemini = get_gemini_with_tools_model([resolver_sumatorias])
         system_message = SystemMessage(content=prompt)
-        human_message = HumanMessage(content="Calcule la complejidad espacial de esto: {code}\n\nAST: {ast}\n\nSumatoria: {sumatoria}".format(**context))
+        human_message = HumanMessage(content=f"Calcule la complejidad espacial de esto: {state['pseudocode']}\n\nAST: {state['ast']}\n\n") # type: ignore
         messages = [system_message, human_message]
-        result = str(gemini.invoke(messages).content)
+        result = gemini.invoke(messages)
+        print("Resultado de la complejidad espacial:")
+        print(result)
         if "CASO_PROMEDIO" in prompt:
             state["solution"]["big_O_espacial"] = result # type: ignore
         elif "MEJOR_CASO" in prompt:

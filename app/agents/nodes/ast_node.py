@@ -3,8 +3,8 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Literal, Tuple
 from langchain_core.messages import SystemMessage, HumanMessage
 from app.agents.llms.gemini import get_gemini_model
-from app.agents.utils.process_ast import convertir_a_sumatoria
-from app.agents.utils.generate_ast import parse_pseudocode
+from app.agents.utils.generate_sum import convertir_a_sumatoria
+from app.agents.utils.generate_ast import generate_ast
 
 
 class TipoCodigo(BaseModel):
@@ -31,7 +31,7 @@ def generate_ast_node(state: AnalyzerState) -> AnalyzerState:
 
     output = llm.invoke(messages)
     # Convertir el output a diccionario para almacenar en el estado
-    state["ast"] = parse_pseudocode(state["pseudocode"])  # type: ignore
+    state["ast"] = generate_ast(state["pseudocode"])['ast']  # type: ignore
     state["mode"] = output.tipo  # type: ignore
-    state["sumatoria"] = convertir_a_sumatoria(state["ast"]) 
+    state["sumatoria"] = convertir_a_sumatoria(state["ast"]) # type: ignore
     return state

@@ -1,0 +1,100 @@
+%import common.CNAME -> NAME
+%import common.SIGNED_NUMBER -> NUMBER
+%import common.INT -> INTEGER
+%import common.WS
+%ignore WS
+%ignore /►.*(?=\n)?/
+
+LESSTHAN: "<"
+MORETHAN: ">"
+LEQ: "≤" | "<="
+GEQ: "≥" | ">="
+EQUAL: "=" | "=="
+NOTEQUAL: "≠" | "!=" | "<>"
+PLUS: "+"
+MINUS: "-"
+STAR: "*"
+SLASH: "/"
+DIV: "div"
+MOD: "mod"
+AND: "and"
+OR: "or"
+NOT: "not"
+
+start: statement+
+
+statement: procedure_def
+         | var_declaration
+         | for_loop
+         | while_loop
+         | repeat_loop
+         | if_statement
+         | assignment
+         | call_statement
+         | return_statement
+         | "accion"                       -> action_statement
+
+var_declaration: NAME ("," NAME)*
+
+procedure_def: "procedimiento" NAME "(" [parameter_list] ")" "begin" statement* "end"
+             | NAME "(" [parameter_list] ")" "begin" statement* "end"
+
+parameter_list: parameter ("," parameter)*
+parameter: NAME "[" array_range "]"
+         | NAME
+         | "Clase" NAME
+
+array_range: (INTEGER | NAME) ".." (INTEGER | NAME)
+
+for_loop: "for" NAME "🡨" expression "to" expression "do" "begin" statement* "end"
+
+while_loop: "while" condition "do" "begin" statement* "end"
+
+repeat_loop: "repeat" "begin" statement* "end" "until" condition
+
+if_statement: "if" condition "then" then_part ["else" else_part]
+
+then_part: "begin" statement* "end" | statement
+else_part: "begin" statement* "end" | statement
+
+assignment: lvalue "🡨" expression
+
+lvalue: NAME "[" expression "]" ("[" expression "]")*
+      | NAME "." NAME
+      | NAME
+
+call_statement: "CALL" NAME "(" [argument_list] ")"
+
+return_statement: "return" expression
+
+argument_list: expression ("," expression)*
+
+?expression: or_expr
+
+?or_expr: and_expr (OR and_expr)*
+
+?and_expr: not_expr (AND not_expr)*
+
+?not_expr: NOT not_expr | comparison
+
+comparison: arith_expr (LESSTHAN | MORETHAN | LEQ | GEQ | EQUAL | NOTEQUAL) arith_expr
+          | arith_expr
+
+arith_expr: term ((PLUS|MINUS) term)*
+
+term: factor ((STAR|SLASH|MOD|DIV) factor)*
+
+?factor: NUMBER                     -> number
+       | NAME                       -> variable
+       | NAME "." NAME              -> field_access
+       | NAME "[" expression "]" ("[" expression "]")*  -> array_access
+       | NAME "(" [argument_list] ")"                   -> function_call
+       | "[" [argument_list] "]"                        -> array_literal
+       | "(" expression ")"
+       | "┌" expression "┐"         -> ceiling
+       | "└" expression "┘"         -> floor
+       | "T"                         -> true_value
+       | "F"                         -> false_value
+       | "NULL"                      -> null_value
+
+condition: expression

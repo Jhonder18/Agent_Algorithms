@@ -2,6 +2,7 @@ from app.agents.tools.tools_iterativas import resolver_sumatorias
 from langchain_core.messages import SystemMessage, HumanMessage
 from app.agents.state import AnalyzerState
 from app.agents.llms.geminiWithTools import get_gemini_with_tools_model
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def costo_temporal_iterativo_node(state: AnalyzerState) -> AnalyzerState:
     """
@@ -18,17 +19,26 @@ def costo_temporal_iterativo_node(state: AnalyzerState) -> AnalyzerState:
         "ast": state["ast"], # type: ignore
         "sumatoria": state["sumatoria"] # type: ignore
     }
-    print(f"\n\n\n{context}\n\n\n")
-    for prompt in prompts:
+    def process_prompt(prompt):
         gemini = get_gemini_with_tools_model([resolver_sumatorias])
         system_message = SystemMessage(content=prompt)
-        human_message = HumanMessage(content=f"Calcule la complejidad temporal de esto: {context['code']}\n\nAST: {context['ast']}\n\nSumatoria: {context['sumatoria']}")
+        human_message = HumanMessage(content=f"Calcule la complejidad temporal de esto: {context['code']}\n\nSumatoria: {context['sumatoria']}")
         messages = [system_message, human_message]
         result = str(gemini.invoke(messages).content)
+        print(result)
         if "CASO_PROMEDIO" in prompt:
-            state["solution"]["big_O_temporal"] = result # type: ignore
+            return ("big_O_temporal", result)
         elif "MEJOR_CASO" in prompt:
-            state["solution"]["big_Theta_temporal"] = result # type: ignore
+            return ("big_Omega_temporal", result)
         elif "PEOR_CASO" in prompt:
-            state["solution"]["big_Omega_temporal"] = result # type: ignore
+            return ("big_Theta_temporal", result)
+    
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = [executor.submit(process_prompt, prompt) for prompt in prompts]
+        
+        for future in as_completed(futures):
+            result = future.result() # type: ignore
+            if result is not None:
+                key, value = result
+                state["solution"][key] = value # type: ignore
     return state
