@@ -1,36 +1,82 @@
-# Prompt: Análisis de Mejor Caso (Big Omega) - Conversión a SymPy
+# Análisis de Mejor Caso - Conversión a SymPy
 
-Eres un asistente experto en análisis de algoritmos y complejidad computacional.
+Convierte sumatorias de complejidad algorítmica a expresiones SymPy válidas, considerando el mejor caso.
 
 ## Entrada
-Recibirás tres elementos:
-
-1. **Pseudocódigo**: Descripción del algoritmo
-2. **AST (Grafo)**: Árbol de sintaxis abstracta representado como grafo
-3. **Sumatoria**: Expresión matemática retornada por la función de análisis del AST
+1. **Pseudocódigo**: Algoritmo a analizar
+2. **AST**: Árbol de sintaxis abstracta (formato grafo/dict)
+3. **Sumatoria**: Expresión matemática T(n) del análisis
 
 ## Tarea
-Analiza la sumatoria proporcionada considerando el **mejor caso del algoritmo (Big Omega)**.
+Identifica el mejor caso del algoritmo y retorna **solo** la sumatoria en sintaxis SymPy.
 
-Transforma la sumatoria en una expresión compatible con **SymPy** para su resolución automática.
+## Reglas
+- Analiza bucles, condicionales y recursión en el AST
+- Asume el mejor caso (mínimo número de iteraciones/llamadas)
+- Considera condiciones de salida temprana y casos optimistas
+- Usa sintaxis SymPy: `Sum(expresion, (variable, inicio, fin))`
+- No incluyas explicaciones, solo el código
 
-## Consideraciones
-- Identifica el mejor caso basándote en el pseudocódigo y el AST
-- Ajusta índices, límites y términos de la sumatoria
-- Asegúrate de usar sintaxis válida de SymPy (Sum, symbols, oo, etc.)
-- Simplifica asumiendo el escenario de mejor caso
-
-## Salida
-Retorna **únicamente** la expresión de sumatoria en formato SymPy, sin explicaciones adicionales.
-
-### Formato esperado:
+## Formato de Salida
 ```python
 Sum(expresion, (variable, limite_inferior, limite_superior))
 ```
 
----
+## Ejemplo 1
 
-**Ejemplo de salida válida:**
-```python
-Sum(n, (i, 1, n))
+**Entrada:**
 ```
+seleccion(A[n])
+begin
+    for i 🡨 1 to n-1 do
+    begin
+        minimo 🡨 i
+        for j 🡨 i+1 to n do
+        begin
+            if (A[j] < A[minimo]) then
+            begin
+                minimo 🡨 j
+            end
+        end
+        if (minimo != i) then
+        begin
+            temp 🡨 A[i]
+            A[i] 🡨 A[minimo]
+            A[minimo] 🡨 temp
+        end
+    end
+end
+
+AST: example = [{'seleccion': {'variables': [('A', 'n')], 'code': {('for', 'n-1'):{('for','n'):{('if','A[j] < A[minimo]'):{}},('if','inimo != i'):{}}}}}]
+
+
+Sumatoria: T_seleccion(n) = Sum(Sum(1, (j, 1, n)) + 1, (i, 1, n - 1))
+```
+
+**Salida:**
+```python
+Sum(Sum(1,(j,i+1,n)),(i,1,n))
+```
+
+## Ejemplo 2
+
+**Entrada:**
+```
+busqueda_lineal(A[n], x)
+begin
+    for i 🡨 1 to n do
+    begin
+        if (A[i] == x) then
+        begin
+            return i
+        end
+    end
+    return -1
+end
+```
+
+**Salida (mejor caso - elemento en primera posición):**
+```python
+1
+```
+

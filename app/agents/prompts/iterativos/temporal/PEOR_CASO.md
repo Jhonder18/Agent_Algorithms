@@ -1,36 +1,73 @@
-# Prompt: Análisis de Peor Caso (Big O) - Conversión a SymPy
+# Análisis de Peor Caso - Conversión a SymPy
 
-Eres un asistente experto en análisis de algoritmos y complejidad computacional.
+Convierte sumatorias de complejidad algorítmica a expresiones SymPy válidas, considerando el peor caso.
 
 ## Entrada
-Recibirás tres elementos:
-
-1. **Pseudocódigo**: Descripción del algoritmo
-2. **AST (Grafo)**: Árbol de sintaxis abstracta representado como grafo
-3. **Sumatoria**: Expresión matemática retornada por la función de análisis del AST
+1. **Pseudocódigo**: Algoritmo a analizar
+2. **AST**: Árbol de sintaxis abstracta (formato grafo/dict)
+3. **Sumatoria**: Expresión matemática T(n) del análisis
 
 ## Tarea
-Analiza la sumatoria proporcionada considerando el **peor caso del algoritmo (Big O)**.
+Identifica el peor caso del algoritmo y retorna **solo** la sumatoria en sintaxis SymPy.
 
-Transforma la sumatoria en una expresión compatible con **SymPy** para su resolución automática.
+## Reglas
+- Analiza bucles, condicionales y recursión en el AST
+- Asume el peor caso (máximo número de iteraciones/llamadas)
+- Usa sintaxis SymPy: `Sum(expresion, (variable, inicio, fin))`
+- No incluyas explicaciones, solo el código
 
-## Consideraciones
-- Identifica el peor caso basándote en el pseudocódigo y el AST
-- Ajusta índices, límites y términos de la sumatoria
-- Asegúrate de usar sintaxis válida de SymPy (Sum, symbols, oo, etc.)
-- Simplifica asumiendo el escenario de peor caso
-
-## Salida
-Retorna **únicamente** la expresión de sumatoria en formato SymPy, sin explicaciones adicionales.
-
-### Formato esperado:
+## Formato de Salida
 ```python
 Sum(expresion, (variable, limite_inferior, limite_superior))
 ```
 
----
+## Ejemplo
 
-**Ejemplo de salida válida:**
+**Entrada:**
+```
+insercion(A[n])
+begin
+    for i 🡨 2 to n do
+    begin
+        clave 🡨 A[i]
+        j 🡨 i - 1
+        while (j > 0 and A[j] > clave) do
+        begin
+            A[j+1] 🡨 A[j]
+            j 🡨 j - 1
+        end
+        A[j+1] 🡨 clave
+    end
+end
+
+AST: [{'insercion': {'variables': [('A', 'n')], 'code': {('for', 'n'): {('while','j > 0 and A[j] > clave'):{}}}}}]
+
+Sumatoria: T_insercion(n) = Sum(W_{j > 0 and A[j] > clave}, (i, 1, n))
+```
+
+**Salida:**
 ```python
-Sum(n, (i, 1, n))
+Sum(n, (i-1, 1, n))
+```
+
+## Ejemplo 2
+
+**Entrada:**
+```
+busqueda_lineal(A[n], x)
+begin
+    for i 🡨 1 to n do
+    begin
+        if (A[i] == x) then
+        begin
+            return i
+        end
+    end
+    return -1
+end
+```
+
+**Salida (mejor caso - elemento en primera posición):**
+```python
+Sum(1,(i,1,n))
 ```
