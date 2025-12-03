@@ -7,6 +7,7 @@ from .recursivo_espacial import recusive_espacial_node
 from .recursivo_temporal import recusive_temporal_node
 from .parse_nl_code import parse_code_node
 from .result import result_node
+from .validate import validate_node
 
 __all__ = [
     "generate_ast_node",
@@ -18,4 +19,5 @@ __all__ = [
     "recusive_temporal_node",
     "parse_code_node",
     "result_node",
+    "validate_node",
 ]

@@ -7,6 +7,7 @@ def create_nodes(graph: StateGraph[AnalyzerState]) -> StateGraph[AnalyzerState]:
     graph.add_node("decicion_node", initial_decision_node)
     graph.add_node("code_description", code_description_node)
     graph.add_node("parse_code", parse_code_node)
+    graph.add_node("validate_node", validate_node)
     graph.add_node("generate_ast", generate_ast_node)
     graph.add_node("calcular_costo_espacial_iterativo", costo_espacial_iterativo_node)
     graph.add_node("calcular_costo_temporal_iterativo", costo_temporal_iterativo_node)
@@ -31,9 +32,9 @@ def create_edges(graph: StateGraph[AnalyzerState]) -> StateGraph[AnalyzerState]:
         },
     )
 
-    graph.add_edge("code_description", "generate_ast")
-    graph.add_edge("parse_code", "generate_ast")
-
+    graph.add_edge("code_description", "validate_node")
+    graph.add_edge("parse_code", "validate_node")
+    graph.add_edge("validate_node", "generate_ast")
     # estatico o iterativo?
     def is_iterative(state: AnalyzerState) -> bool:
         return state.get("mode") == "iterativo"

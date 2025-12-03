@@ -1,6 +1,6 @@
 from app.agents.state import AnalyzerState
 from pydantic import BaseModel
-from typing import List, Dict, Any, Literal, Tuple
+from typing import Literal
 from langchain_core.messages import SystemMessage, HumanMessage
 from app.agents.llms.gemini import get_gemini_model
 from app.agents.utils.generate_sum import convertir_a_sumatoria

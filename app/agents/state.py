@@ -24,4 +24,5 @@ class AnalyzerState(TypedDict, total=False):
     recurrence: Annotated[Dict[str, Any], "Ecuaciones de recurrencias para flujo recursivo"]
     solution: Annotated[SolutionState, "Solución del análisis"]
     # Resultado agregado
+    razonamiento: Annotated[list[str], "Razonamiento del análisis"]
     result: Annotated[Dict[str, Any], "Resultado en NL agregado del análisis"]
