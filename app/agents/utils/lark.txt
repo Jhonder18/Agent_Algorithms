@@ -1,15 +1,10 @@
-// shared/grammar/grammar.lark
-// Gramática para pseudocódigo del proyecto
-// Comentarios con ► al final de línea
-
 %import common.CNAME -> NAME
 %import common.SIGNED_NUMBER -> NUMBER
 %import common.INT -> INTEGER
 %import common.WS
 %ignore WS
-%ignore /►.*(?=\n)?/   // Comentarios con ►
+%ignore /►.*(?=\n)?/
 
-// Operadores y palabras
 LESSTHAN: "<"
 MORETHAN: ">"
 LEQ: "≤" | "<="
@@ -26,10 +21,8 @@ AND: "and"
 OR: "or"
 NOT: "not"
 
-// Punto de entrada
 start: statement+
 
-// Declaraciones principales
 statement: procedure_def
          | var_declaration
          | for_loop
@@ -41,10 +34,8 @@ statement: procedure_def
          | return_statement
          | "accion"                       -> action_statement
 
-// Declaración de variables (solo nombres separados por coma)
 var_declaration: NAME ("," NAME)*
 
-// Definición de procedimiento/función
 procedure_def: "procedimiento" NAME "(" [parameter_list] ")" "begin" statement* "end"
              | NAME "(" [parameter_list] ")" "begin" statement* "end"
 
@@ -55,7 +46,6 @@ parameter: NAME "[" array_range "]"
 
 array_range: (INTEGER | NAME) ".." (INTEGER | NAME)
 
-// Estructuras de control
 for_loop: "for" NAME "🡨" expression "to" expression "do" "begin" statement* "end"
 
 while_loop: "while" condition "do" "begin" statement* "end"
@@ -67,7 +57,6 @@ if_statement: "if" condition "then" then_part ["else" else_part]
 then_part: "begin" statement* "end" | statement
 else_part: "begin" statement* "end" | statement
 
-// Asignación y llamadas
 assignment: lvalue "🡨" expression
 
 lvalue: NAME "[" expression "]" ("[" expression "]")*
@@ -78,7 +67,6 @@ call_statement: "CALL" NAME "(" [argument_list] ")"
 
 return_statement: "return" expression
 
-// Argumentos y expresiones
 argument_list: expression ("," expression)*
 
 ?expression: or_expr
@@ -109,5 +97,4 @@ term: factor ((STAR|SLASH|MOD|DIV) factor)*
        | "F"                         -> false_value
        | "NULL"                      -> null_value
 
-// Alias
 condition: expression

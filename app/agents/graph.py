@@ -1,97 +1,71 @@
-# app/agents/graph.py
-from __future__ import annotations
-from typing import Any, Dict, TypedDict, Optional
-
-from dotenv import load_dotenv
-load_dotenv()
-
+from app.agents.nodes import *
+from app.agents.state import AnalyzerState
 from langgraph.graph import StateGraph, START, END
 
-# Nodos (ajusta los nombres si en tus archivos exportaste funciones con otro nombre)
-from app.agents.nodes.normalize import normalize_node
-from app.agents.nodes.validate import validate_node
-from app.agents.nodes.ast_tool_node import ast_node
-from app.agents.nodes.costs_json import costs_node
-from app.agents.nodes.solve_json import solve_node
-from app.agents.nodes.summarize import summarize_node
 
-# (Opcional) Si ya tienes un router propio:
-try:
-    from app.agents.planner import planner_decide  # Debe devolver "normalize" o "validate"
-except Exception:
-    planner_decide = None
-
-
-# ---------------------------
-# Estado del grafo
-# ---------------------------
-class GraphState(TypedDict, total=False):
-    # Entrada
-    input_text: str      # Texto NL opcional
-    pseudocode: str      # Pseudocódigo (si ya lo traes o lo produce normalize)
-
-    # Resultados intermedios
-    validation: Dict[str, Any]
-    ast: Dict[str, Any]
-    costs: Dict[str, Any]
-    solution: Dict[str, Any]
-
-    # Agregación final opcional
-    result: Dict[str, Any]
+def create_nodes(graph: StateGraph[AnalyzerState]) -> StateGraph[AnalyzerState]:
+    graph.add_node("decicion_node", initial_decision_node)
+    graph.add_node("code_description", code_description_node)
+    graph.add_node("parse_code", parse_code_node)
+    graph.add_node("validate_node", validate_node)
+    graph.add_node("generate_ast", generate_ast_node)
+    graph.add_node("calcular_costo_espacial_iterativo", costo_espacial_iterativo_node)
+    graph.add_node("calcular_costo_temporal_iterativo", costo_temporal_iterativo_node)
+    graph.add_node("calcular_costo_espacial_recursivo", recusive_espacial_node)
+    graph.add_node("calcular_costo_temporal_recursivo", recusive_temporal_node)
+    graph.add_node("preparacion_resultado", result_node)
+    return graph
 
 
-# ---------------------------
-# Router START -> normalize/validate
-# ---------------------------
-def _heuristic_router(state: GraphState) -> str:
-    """Fallback simple si no existe planner_decide."""
-    txt = (state.get("pseudocode")
-           or state.get("input_text")
-           or "")
-    # Marcadores típicos de tu pseudo (🡨, begin/end, for/while/if/return/CALL, etc.)
-    markers = ["🡨", "begin", "end", "for ", "while ", "if ", "CALL", "return", " then ", " do "]
-    is_pseudo = any(m in txt for m in markers)
-    return "validate" if is_pseudo else "normalize"
+def create_edges(graph: StateGraph[AnalyzerState]) -> StateGraph[AnalyzerState]:
+    graph.add_edge(START, "decicion_node")
+    # recibe codigo o nl?
+    def is_pseudocode(state: AnalyzerState) -> bool:
+        return state.get("pseudocode") != ""
 
-
-def route_from_start(state: GraphState) -> str:
-    if planner_decide is not None:
-        try:
-            # Debe devolver exactamente "normalize" o "validate"
-            decision = planner_decide(state)  # type: ignore[arg-type]
-            return "normalize" if decision == "normalize" else "validate"
-        except Exception:
-            pass
-    return _heuristic_router(state)
-
-
-# ---------------------------
-# Ensamblador del grafo
-# ---------------------------
-def build_graph():
-    g = StateGraph(GraphState)
-
-    # Registrar nodos
-    g.add_node("normalize", normalize_node)  # NL -> pseudocode
-    g.add_node("validate", validate_node)    # valida/corrige el pseudo
-    g.add_node("ast", ast_node)              # Tool determinística (Lark) -> AST dict
-    g.add_node("costs", costs_node)          # Costos por nodo/línea y totales
-    g.add_node("solve", solve_node)          # Exact, Big-O, bounds, etc.
-    g.add_node("summarize", summarize_node)  # Texto final (opcional)
-
-    # Ruteo inicial: START -> normalize | validate
-    g.add_conditional_edges(
-        START,
-        route_from_start,
-        {"normalize": "normalize", "validate": "validate"},
+    graph.add_conditional_edges(
+        "decicion_node",
+        is_pseudocode,
+        {
+            True: "code_description",
+            False: "parse_code",
+        },
     )
 
-    # Flujo principal
-    g.add_edge("normalize", "validate")
-    g.add_edge("validate", "ast")
-    g.add_edge("ast", "costs")
-    g.add_edge("costs", "solve")
-    g.add_edge("solve", "summarize")
-    g.add_edge("summarize", END)
+    graph.add_edge("code_description", "validate_node")
+    graph.add_edge("parse_code", "validate_node")
+    graph.add_edge("validate_node", "generate_ast")
+    # estatico o iterativo?
+    def is_iterative(state: AnalyzerState) -> bool:
+        return state.get("mode") == "iterativo"
 
-    return g.compile()
+    graph.add_conditional_edges(
+        "generate_ast",
+        is_iterative,
+        {
+            True: "calcular_costo_temporal_iterativo",
+            False: "calcular_costo_temporal_recursivo",
+        },
+    )
+
+    graph.add_edge(
+        "calcular_costo_temporal_iterativo", "calcular_costo_espacial_iterativo"
+    )
+    graph.add_edge("calcular_costo_espacial_iterativo", "preparacion_resultado")
+
+    graph.add_edge(
+        "calcular_costo_temporal_recursivo", "calcular_costo_espacial_recursivo"
+    )
+    graph.add_edge("calcular_costo_espacial_recursivo", "preparacion_resultado")
+
+    graph.add_edge("preparacion_resultado", END)
+    return graph
+
+
+def build_graph() -> StateGraph[AnalyzerState]:
+    graph = StateGraph(AnalyzerState)
+
+    graph = create_nodes(graph)
+    graph = create_edges(graph) 
+
+    return graph

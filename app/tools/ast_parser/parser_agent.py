@@ -6,7 +6,8 @@ from lark import Lark, Transformer, Tree, Token, v_args
 from app.tools.ast_parser.ast_nodes import (
     Program, Function, Param, Block,
     Assign, If, While, For, Return, ExprStmt,
-    Var, Literal, BinOp, UnOp, Compare, Call, ArrayAccess,
+    VarDeclaration, CallStatement, ActionStatement,
+    Var, Literal, BinOp, UnOp, Compare, Call, ArrayAccess, ArrayLiteral,
     Expr, Stmt
 )
 
@@ -69,14 +70,25 @@ class PseudocodeToASTTransformer(Transformer):
             line_end=line_end,
         )
 
+    @v_args(meta=True)
+    def var_declaration(self, meta, children):
+        names = [str(tok) for tok in children if isinstance(tok, Token)]
+        line_start, line_end = self._meta_lines(meta)
+        return VarDeclaration(names=names, line_start=line_start, line_end=line_end)
+
     def lvalue(self, children):
-        # NAME | NAME[expr] | NAME . NAME
+        # NAME | NAME[expr]([expr])* | NAME . NAME
         if len(children) == 1:
             return Var(name=str(children[0]))
         name = str(children[0])
         second = children[1]
         if isinstance(second, Expr):
-            return ArrayAccess(array=Var(name=name), index=second)
+            # Soporte para arrays multidimensionales: A[i][j]
+            base: Union[Var, ArrayAccess] = ArrayAccess(array=Var(name=name), index=second)
+            for extra in children[2:]:
+                if isinstance(extra, Expr):
+                    base = ArrayAccess(array=base, index=extra)
+            return base
         return Var(name=f"{name}.{second}")
 
     @v_args(meta=True)
@@ -126,10 +138,18 @@ class PseudocodeToASTTransformer(Transformer):
             line_end=line_end,
         )
 
-    def repeat_loop(self, children):
-        # repeat begin ... end until condition  ==>  while (not condition) do ...
-        body, cond = children[0], children[1]
-        return While(cond=UnOp(op="not", operand=cond), body=body)
+    @v_args(meta=True)
+    def repeat_loop(self, meta, children):
+        # repeat begin ... end until condition  ==> while (not condition) do ...
+        *body_nodes, cond = children
+        body = self._block(body_nodes)
+        line_start, line_end = self._meta_lines(meta)
+        return While(
+            cond=UnOp(op="not", operand=cond),
+            body=body,
+            line_start=line_start,
+            line_end=line_end,
+        )
 
     @v_args(meta=True)
     def return_statement(self, meta, children):
@@ -142,6 +162,18 @@ class PseudocodeToASTTransformer(Transformer):
 
     def expr_stmt(self, children):
         return ExprStmt(expr=children[0])
+
+    @v_args(meta=True)
+    def call_statement(self, meta, children):
+        name = str(children[0])
+        args = children[1] if len(children) > 1 and isinstance(children[1], list) else []
+        line_start, line_end = self._meta_lines(meta)
+        return CallStatement(name=name, args=args, line_start=line_start, line_end=line_end)
+
+    @v_args(meta=True)
+    def action_statement(self, meta, _children):
+        line_start, line_end = self._meta_lines(meta)
+        return ActionStatement(line_start=line_start, line_end=line_end)
 
     # ===== Expresiones =====
     def expr(self, children):
@@ -231,6 +263,16 @@ class PseudocodeToASTTransformer(Transformer):
 
     def field_access(self, children):
         return Var(name=f"{children[0]}.{children[1]}")
+
+    def array_literal(self, children):
+        elements = [child for child in children if isinstance(child, Expr)]
+        return ArrayLiteral(elements=elements)
+
+    def ceiling(self, children):
+        return Call(name="ceil", args=[children[0]])
+
+    def floor(self, children):
+        return Call(name="floor", args=[children[0]])
 
     # Opcionales de la gramática (si se usan)
     def true_value(self, _):  # "T"

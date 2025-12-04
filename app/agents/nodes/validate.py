@@ -1,54 +1,45 @@
-# app/agents/nodes/validate.py
-from __future__ import annotations
-from typing import TypedDict, Dict, Any
-import re
+from pydantic import BaseModel
+from app.agents.llms.gemini import get_gemini_model
+from app.agents.state import AnalyzerState
+from langchain_core.messages import SystemMessage, HumanMessage
 
-ARROW = "🡨"
+class ValidationResult(BaseModel):
+    is_valid: bool
+    errors: list[str]
 
-class AgentState(TypedDict, total=False):
-    pseudocode: str
-    validation: Dict[str, Any]
+# https://towardsdev.com/built-with-langgraph-3-structured-outputs-4707284be57e
+class CodeFixed(BaseModel):
+    """
+    Clase para normalizar el código fuente en una representación intermedia.
+    """
+    code: str
 
-def _simple_normalize(code: str) -> tuple[str, list[str]]:
-    changes = []
-    new = code
 
-    if "->" in new or "←" in new:
-        new = new.replace("->", ARROW).replace("←", ARROW)
-        changes.append("Reemplazo de asignación por flecha")
-
-    # uniformizar keywords en minúscula
-    for kw in ["BEGIN","END","FOR","WHILE","IF","ELSE","REPEAT","UNTIL","RETURN","AND","OR","NOT","DO","THEN"]:
-        if kw in new:
-            new = re.sub(rf"\b{kw}\b", kw.lower(), new)
-            changes.append(f"Lowercase de '{kw}'")
-
-    # asegurar newline final
-    if not new.endswith("\n"):
-        new += "\n"
-        changes.append("Nueva línea añadida al final")
-
-    return new, changes
-
-def validate_node(state: AgentState) -> Dict:
-    code = (state.get("pseudocode") or "").strip()
-    era_algo = bool(re.search(r"\bbegin\b.*\bend\b", code, flags=re.I|re.S))
-    corregido, normalizaciones = _simple_normalize(code)
-
-    hints = {
-        "parser_engine": "llm-free-pass",  # aquí puedes poner "lark-lalr" si luego usas tu parser real
-        "language_hint": "es",
-        "code_length": len(corregido),
-        "line_count": corregido.count("\n")
-    }
-
-    validation = {
-        "era_algoritmo_valido": era_algo,
-        "codigo_corregido": corregido,
-        "errores": [] if era_algo else ["Bloques begin/end no detectados"],
-        "normalizaciones": normalizaciones,
-        "hints": hints,
-    }
-    return {"validation": validation, "pseudocode": corregido}
-
-__all__ = ["validate_node"]
+def validate_node(state: AnalyzerState) -> AnalyzerState:
+    """
+    Nodo para validar el pseudocódigo proporcionado en el estado del analizador.
+    Se ejecutra antes de generar el AST y puede corregir errores menores en el pseudocódigo.
+    """ 
+    code = state["pseudocode"]  # type: ignore
+    PROMPT_VALIDATE = ""
+    with open("./app/agents/prompts/SINTAXE.md", "r", encoding="utf-8") as f:
+        PROMPT_VALIDATE = f.read()
+    gemini_validate = get_gemini_model()
+    system_message = SystemMessage(content=PROMPT_VALIDATE)
+    human_message = HumanMessage(content=code)
+    output_validated = gemini_validate.with_structured_output(ValidationResult)
+    response = output_validated.invoke([system_message, human_message])
+    PROMPT_FIX = ""
+    with open("./app/agents/prompts/NL_TO_CODE.md", "r", encoding="utf-8") as f:
+        PROMPT_FIX = f.read()
+    gemini_fix = get_gemini_model()
+    output_fix = gemini_fix.with_structured_output(CodeFixed)
+    while not response.is_valid: # type: ignore
+        system_message = SystemMessage(content=PROMPT_FIX)
+        human_message_fix = HumanMessage(content=f"este es un codigo para {state['nl_description']}, por favor arregle la sintaxe:\n {code}") # type: ignore
+        response = output_fix.invoke([system_message, human_message_fix])
+        code = response.code  # type: ignore
+        human_message = HumanMessage(content=code)
+        response = output_validated.invoke([system_message, human_message])
+    state["pseudocode"] = code  # type: ignore
+    return state
