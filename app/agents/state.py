@@ -101,6 +101,14 @@ class SpaceAnalysis(TypedDict, total=False):
 # ESTADO PRINCIPAL DEL ANALIZADOR
 # ═══════════════════════════════════════════════════════════════════════════════
 
+class CostoLineaLineaMejor(TypedDict):
+    lineas: Annotated[list[str], "Lista de líneas de código"]
+    costos: Annotated[list[str], "Lista de costos asociados a cada línea"]
+
+class CostoLineaLineaPeor(TypedDict):
+    lineas: Annotated[list[str], "Lista de líneas de código"]
+    costos: Annotated[list[str], "Lista de costos asociados a cada línea"]
+
 class AnalyzerState(TypedDict, total=False):
     """
     Estado completo que fluye a través del pipeline de LangGraph.
@@ -118,9 +126,8 @@ class AnalyzerState(TypedDict, total=False):
     # ═══════════════════════════════════════════
     mode: Annotated[Literal["iterativo", "recursivo"], "'iterativo' o 'recursivo'"]
     ast: Annotated[Dict[str, Any], "Árbol sintáctico abstracto"]
-    sumatoria: Annotated[str, "Expresión de sumatoria para flujo iterativo"]
-    
-    # Validación
+    sumatoria: Annotated[str, "Expresión de sumatoria para flujo iterativo/recursivo"]
+    # Resultados intermedios
     validation: Optional[Annotated[Dict[str, Any], "Validación del pseudocódigo"]]
     
     # ═══════════════════════════════════════════
