@@ -82,6 +82,7 @@ def convertir_a_sumatoria(codigo: list) -> str:
                     terminos.append(f"T_{func_name}(n)")
 
         # Combinar términos con suma
+        print(terminos)
         if terminos:
             return " + ".join(terminos)
         return ""

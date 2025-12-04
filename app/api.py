@@ -5,6 +5,7 @@ from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.agents.graph import build_graph
+from app.agents.state import AnalyzerState
 
 app = FastAPI(
     title="Complexity Agents API",
@@ -22,8 +23,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-graph = build_graph()
-
 class AnalyzeIn(BaseModel):
     text: str
     language_hint: Optional[str] = "es"
@@ -31,10 +30,12 @@ class AnalyzeIn(BaseModel):
 @app.post("/api/v2/analyze")
 def analyze(in_: AnalyzeIn):
     try:
-        state = {"input_text": in_.text.strip()}
-        out = graph.invoke(state)
+        state = AnalyzerState()
+        state["nl_description"] = f"{in_.text}"
+        graph = build_graph().compile()
+        result = graph.invoke(state)
         # out YA tiene input_text, validation, ast, costs, solution, metadata
-        return out
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
