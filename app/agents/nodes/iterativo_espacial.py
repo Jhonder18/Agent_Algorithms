@@ -27,7 +27,7 @@ def costo_espacial_iterativo_node(state: AnalyzerState) -> AnalyzerState:
         f"{folder}/PEOR_CASO.md",
     ]
     for file in files:
-        with open(file, "r") as f:
+        with open(file, "r", encoding="utf-8") as f:
             prompts.append(f.read())
     
     # Ejecutar de manera iterativa

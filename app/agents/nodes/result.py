@@ -34,7 +34,7 @@ def result_node(state: AnalyzerState) -> AnalyzerState:
     gemini = get_gemini_model()
     gemini_structured = gemini.with_structured_output(NotacionesYAnalisis)
     PROMPT = ""
-    with open("./app/agents/prompts/GENERAR_RESULT.md", "r") as f:
+    with open("./app/agents/prompts/GENERAR_RESULT.md", "r", encoding="utf-8") as f:
         PROMPT = f.read()
     system_message = SystemMessage(content=PROMPT)
     human_message = HumanMessage(content=f"El análisis realizado tiene los siguientes resultados:\n\n{state['pseudocode']}\n\n{state['ast']}\n\n{state['ecuaciones']}")  # type: ignore
