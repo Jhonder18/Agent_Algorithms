@@ -17,6 +17,14 @@ class Notacion(TypedDict):
     big_Omega_temporal: str
     big_Omega_espacial: str
 
+class CostoLineaLineaMejor(TypedDict):
+    lineas: Annotated[list[str], "Lista de líneas de código"]
+    costos: Annotated[list[str], "Lista de costos asociados a cada línea"]
+
+class CostoLineaLineaPeor(TypedDict):
+    lineas: Annotated[list[str], "Lista de líneas de código"]
+    costos: Annotated[list[str], "Lista de costos asociados a cada línea"]
+
 class AnalyzerState(TypedDict, total=False):
 
     # Entrada
@@ -27,6 +35,8 @@ class AnalyzerState(TypedDict, total=False):
     mode: Annotated[Literal["iterative", "recursive"], "'iterative' o 'recursive'"]
     ast: Annotated[Dict[str, Any], "Árbol sintáctico abstracto"]
     sumatoria: Annotated[str, "Expresión de sumatoria para flujo iterativo/recursivo"]
+    costos_mejor: Annotated[CostoLineaLineaMejor, "Costos línea a línea para caso mejor"]
+    costos_peor: Annotated[CostoLineaLineaPeor, "Costos línea a línea para caso peor"]
     # Resultados intermedios
     validation: Optional[Annotated[Dict[str, Any], "Validación del pseudocódigo"]]
     recurrence: Annotated[Dict[str, Any], "Ecuaciones de recurrencias para flujo recursivo"]

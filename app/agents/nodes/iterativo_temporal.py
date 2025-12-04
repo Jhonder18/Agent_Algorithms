@@ -3,6 +3,9 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from app.agents.state import AnalyzerState
 from app.agents.llms.geminiWithTools import get_gemini_with_tools_model
 from app.agents.state import AnalyzerState
+from app.agents.utils.costo_lineas import analizar_costo_lineas
+
+
 
 def costo_temporal_iterativo_node(state: AnalyzerState) -> AnalyzerState:
     """
@@ -18,6 +21,14 @@ def costo_temporal_iterativo_node(state: AnalyzerState) -> AnalyzerState:
             "big_Theta_espacial": "",
             "big_Omega_temporal": "",
             "big_Omega_espacial": "",
+        }
+        state["costos_mejor"] = {  # type: ignore
+            "lineas": [],
+            "costos": [],
+        }
+        state["costos_peor"] = {  # type: ignore
+            "lineas": [],
+            "costos": [],
         }
     
     prompts = []
@@ -64,5 +75,7 @@ def costo_temporal_iterativo_node(state: AnalyzerState) -> AnalyzerState:
             state["ecuaciones"]["big_Omega_temporal"] = result  # type: ignore
         elif i == 0:
             state["ecuaciones"]["big_Theta_temporal"] = result  # type: ignore
-
+    mejor_caso, peor_caso = analizar_costo_lineas(state["pseudocode"])  # type: ignore
+    state["costos_mejor"] = mejor_caso  # type: ignore
+    state["costos_peor"] = peor_caso  # type: ignore
     return state
