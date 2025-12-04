@@ -1,1 +1,0 @@
-Dado un pseudocodigo quiero que lo analises y genre un loop invariante

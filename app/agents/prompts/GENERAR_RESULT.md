@@ -47,4 +47,18 @@ Genera un **análisis completo y detallado** del algoritmo que incluya:
 
 ## Formato de Salida
 
-Presenta tu análisis en **markdown** con secciones claramente delimitadas, ejemplos cuando sea necesario y notación Big O apropiada.
+Proporciona tu respuesta en el siguiente formato JSON basado en la clase `NotacionesYAnalisis`:
+
+```json
+{
+  "analisis": "Análisis completo y detallado del algoritmo incluyendo todos los puntos anteriores",
+  "big_O_temporal": "Notación Big-O para complejidad temporal (peor caso)", // O(n²)
+  "big_O_espacial": "Notación Big-O para complejidad espacial (peor caso)",
+  "big_Theta_temporal": "Notación Theta para complejidad temporal (caso promedio)", // Theta(n)
+  "big_Theta_espacial": "Notación Theta para complejidad espacial (caso promedio)",
+  "big_Omega_temporal": "Notación Omega para complejidad temporal (mejor caso)", // Omega(1)
+  "big_Omega_espacial": "Notación Omega para complejidad espacial (mejor caso)"
+}
+```
+
+**Nota**: El campo `analisis` debe contener el texto completo con todas las secciones solicitadas (Resumen Ejecutivo, Análisis de Complejidad, Análisis Estructural, Optimización y Casos de Uso).

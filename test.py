@@ -20,5 +20,11 @@ begin
 end"""
 graph = build_graph().compile()
 
-for chunk in graph.stream(state):
-    print(chunk)
+out = graph.invoke(state)
+
+print("RESULTADO FINAL")
+print(out["result"])
+print("NOTACIONES")
+print(out["notation"])
+print("ECUACIONES")
+print(out["ecuaciones"])

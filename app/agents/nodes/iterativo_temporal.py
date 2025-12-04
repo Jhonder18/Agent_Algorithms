@@ -8,11 +8,10 @@ def costo_temporal_iterativo_node(state: AnalyzerState) -> AnalyzerState:
     """
     Calcula la sumatoria dada y retorna su resultado simplificado
     """
-    print("Calculando costo temporal iterativo...")  # type: ignore --- IGNORE ---
     
-    # Initialize solution if it doesn't exist
-    if "solution" not in state:
-        state["solution"] = {  # type: ignore
+    # Initialize ecuaciones if it doesn't exist
+    if "ecuaciones" not in state:
+        state["ecuaciones"] = {  # type: ignore
             "big_O_temporal": "",
             "big_O_espacial": "",
             "big_Theta_temporal": "",
@@ -38,8 +37,11 @@ def costo_temporal_iterativo_node(state: AnalyzerState) -> AnalyzerState:
     }
     gemini = get_gemini_with_tools_model([resolver_sumatorias])
 
-    for i in range(len(prompts)):
-        system_message = SystemMessage(content=prompts[i])
+    
+    # Execute prompts iteratively
+    results = []
+    for i, prompt in enumerate(prompts):
+        system_message = SystemMessage(content=prompt)
         human_message = HumanMessage(
             content=f"Calcule la complejidad temporal de esto: {context['code']}\n\nSumatoria: {context['sumatoria']}"
         )
@@ -51,16 +53,16 @@ def costo_temporal_iterativo_node(state: AnalyzerState) -> AnalyzerState:
             result = resolver_sumatorias.invoke(response.tool_calls[0]["args"])
         else:
             result = response.content
-
-
-        if i==2:
-            print("O t", result)  # type: ignore --- IGNORE ---
-            state["solution"]["big_O_temporal"] = result  # type: ignore
-        elif i==1:
-            print("Omega t", result)  # type: ignore --- IGNORE ---
-            state["solution"]["big_Omega_temporal"] = result  # type: ignore
-        elif i==0:
-            print("Theta t", result)  # type: ignore --- IGNORE ---
-            state["solution"]["big_Theta_temporal"] = result  # type: ignore
+        
+        results.append((i, result))
+    
+    # Process results
+    for i, result in results:
+        if i == 2:
+            state["ecuaciones"]["big_O_temporal"] = result  # type: ignore
+        elif i == 1:
+            state["ecuaciones"]["big_Omega_temporal"] = result  # type: ignore
+        elif i == 0:
+            state["ecuaciones"]["big_Theta_temporal"] = result  # type: ignore
 
     return state
