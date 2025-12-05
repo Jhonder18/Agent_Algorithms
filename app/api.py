@@ -1,4 +1,8 @@
 # app/api.py
+import os
+# Deshabilitar LangSmith tracing para mejor performance en API
+os.environ["LANGSMITH_TRACING"] = "false"
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Any, Dict, List
