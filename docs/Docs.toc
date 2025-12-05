@@ -1,0 +1,23 @@
+\babel@toc {spanish}{}\relax 
+\contentsline {section}{\numberline {1}Introducción}{3}{section.1}%
+\contentsline {section}{\numberline {2}Análisis del Problema}{3}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Alcance del Sistema}{3}{subsection.2.1}%
+\contentsline {section}{\numberline {3}Entrada de Datos y Sintaxis}{3}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Estructuras de Control}{4}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Reglas Generales}{4}{subsection.3.2}%
+\contentsline {subsection}{\numberline {3.3}Clases y Objetos}{4}{subsection.3.3}%
+\contentsline {subsection}{\numberline {3.4}Subrutinas}{4}{subsection.3.4}%
+\contentsline {subsection}{\numberline {3.5}Operadores}{4}{subsection.3.5}%
+\contentsline {subsection}{\numberline {3.6}Modalidades de Interacción}{5}{subsection.3.6}%
+\contentsline {subsection}{\numberline {3.7}Metodología de Desarrollo}{5}{subsection.3.7}%
+\contentsline {section}{\numberline {4}Arquitectura e Implementación del Sistema}{5}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Integración de LLMs}{5}{subsection.4.1}%
+\contentsline {section}{\numberline {5}Análisis de Eficiencia del Sistema}{6}{section.5}%
+\contentsline {subsection}{\numberline {5.1}Bibliotecas y Herramientas Utilizadas}{6}{subsection.5.1}%
+\contentsline {subsection}{\numberline {5.2}Complejidad Temporal del Sistema}{6}{subsection.5.2}%
+\contentsline {subsection}{\numberline {5.3}Comparación de Rendimiento}{6}{subsection.5.3}%
+\contentsline {section}{\numberline {6}Pruebas}{7}{section.6}%
+\contentsline {section}{\numberline {7}Conclusiones y Recomendaciones}{7}{section.7}%
+\contentsline {subsection}{\numberline {7.1}Conclusiones}{7}{subsection.7.1}%
+\contentsline {subsection}{\numberline {7.2}Recomendaciones para Mejoras Futuras}{8}{subsection.7.2}%
+\contentsline {section}{\numberline {8}Codigo}{8}{section.8}%

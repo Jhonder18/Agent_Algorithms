@@ -1,0 +1,291 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{geometry}
+\usepackage{fancyhdr}
+
+\geometry{margin=2.5cm}
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{\thepage}
+\lhead{Analizador de Algoritmos}
+
+% Configuración de listings para código
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+}
+
+
+
+
+\begin{document}
+
+\title{Sistema de Análisis Automático de Complejidad Algorítmica}
+
+\author{
+    Juan David Ocampo González \\
+    Juan Manoel Miranda Gómez
+}
+
+\date{Diciembre 5 de 2025}
+
+\maketitle
+
+\vfill
+\begin{center}
+    \textbf{Docente:} Luz Enith Guerrero
+\end{center}
+\vfill
+\newpage
+
+\tableofcontents
+\newpage
+
+\section{Introducción}
+
+El \textit{Analizador de Algoritmos} es un software desarrollado por un equipo de estudiantes de ingeniería de la Universidad de Caldas, durante el curso de Análisis y Diseño de Algoritmos, dictado por la docente Luz Enith Guerrero.
+
+Este software tiene como función analizar la eficiencia temporal y espacial de algoritmos escritos en pseudocódigo, utilizando métodos vistos en clase con el apoyo de modelos de lenguaje grandes (LLMs) para lograr un análisis más profundo y preciso.
+
+El proyecto nos motivó a reforzar conceptos vistos en clase y a explorar tecnologías emergentes como LangGraph y Gemini para resolver este desafío de forma innovadora.
+
+
+
+\section{Análisis del Problema}
+
+Realizar el análisis de complejidad de un algoritmo requiere personas con experiencia y conocimientos avanzados en cálculo, lo que puede tomar horas o incluso días para obtener un aproximado de la eficiencia del algoritmo. Abstraer esta información para que pueda ejecutarse en código era prácticamente imposible antes, ya que no siempre es fácil extraer las ecuaciones de recurrencia o las sumatorias exactas de los algoritmos.
+
+Nuestro \textit{Analizador de Algoritmos} puede recibir tanto lenguaje natural como pseudocódigo, el cual puede contener arreglos, ciclos, llamados a funciones, estructuras condicionales y más. Lo que le permite hacer un analisis que tardaria demaciado tiempo, en cuestion de minutos. 
+
+\subsection{Alcance del Sistema}
+
+Nuestro software tiene un alcance extenso, siendo capaz de procesar:
+
+\begin{itemize}
+    \item \textbf{Algoritmos recursivos}: Detección automática de recursión, construcción de relaciones de recurrencia $T(n) = aT(n/b) + f(n)$, y aplicación del teorema maestro.
+    \item \textbf{Algoritmos iterativos}: Análisis de ciclos \texttt{for}, \texttt{while}, \texttt{repeat-until}, con soporte para anidamiento múltiple.
+    \item \textbf{Estructuras de control}: Condicionales \texttt{if-else} con análisis de mejor, peor y caso promedio.
+    \item \textbf{Análisis línea por línea}: Cálculo de costo computacional para cada línea de código.
+\end{itemize}
+
+Su única limitación depende del LLM y su respectiva API key. Actualmente utilizamos la API gratuita de Google con los modelos \texttt{gemini-2.5-flash} y \texttt{gemini-2.5-flash-lite}, que con prompts bien diseñados e inputs organizados, son capaces de resolver los algoritmos vistos en clase con una precisión superior al 90\%.
+
+\section{Entrada de Datos y Sintaxis}
+
+La sintaxis del pseudocódigo fue definida por la docente y se estructura de la siguiente manera:
+
+\subsection{Estructuras de Control}
+
+\begin{itemize}
+    \item \textbf{FOR}: \texttt{for variableContadora $\leftarrow$ valorInicial to limite do begin ... end}
+    \item \textbf{WHILE}: \texttt{while (condicion) do begin ... end}
+    \item \textbf{REPEAT}: \texttt{repeat ... until (condicion)}
+    \item \textbf{IF}: \texttt{if (condicion) then begin ... end else begin ... end}
+\end{itemize}
+
+\subsection{Reglas Generales}
+
+\begin{itemize}
+    \item \textbf{Asignación}: Símbolo $\leftarrow$ (no se permiten asignaciones múltiples)
+    \item \textbf{Comentarios}: Símbolo $\triangleright$ para el resto de la línea
+    \item \textbf{Variables}: Locales al procedimiento (no globales)
+    \item \textbf{Acceso a arreglos}: \texttt{A[i]} o \texttt{A[1..j]} para rangos
+    \item \textbf{Tamaño de arreglo}: \texttt{length(A)}
+    \item \textbf{Declaración de vectores locales}: Al inicio después de \texttt{begin}
+\end{itemize}
+
+\subsection{Clases y Objetos}
+
+\begin{itemize}
+    \item \textbf{Definición de clase}: \texttt{NombreClase \{atributo1 atributo2 ...\}}
+    \item \textbf{Declaración de objeto}: \texttt{Clase nombre\_del\_objeto}
+    \item \textbf{Acceso a campos}: \texttt{objeto.campo}
+    \item \textbf{Punteros}: Pueden tener valor \texttt{NULL}
+\end{itemize}
+
+\subsection{Subrutinas}
+
+\begin{itemize}
+    \item \textbf{Definición}: \texttt{nombre\_subrutina(parámetro1, ..., parámetroK) begin ... end}
+    \item \textbf{Parámetros arreglo}: \texttt{nombre\_arreglo[n..m]}
+    \item \textbf{Parámetros objeto}: \texttt{Clase nombre\_objeto}
+    \item \textbf{Llamado}: \texttt{CALL nombre\_subrutina(parámetros)}
+\end{itemize}
+
+\subsection{Operadores}
+
+\begin{itemize}
+    \item \textbf{Booleanos}: \texttt{and}, \texttt{or}, \texttt{not} (con evaluación perezosa)
+    \item \textbf{Valores booleanos}: \texttt{T} (true), \texttt{F} (false)
+    \item \textbf{Relacionales}: $<$, $>$, $\leq$, $\geq$, $=$, $\neq$
+    \item \textbf{Matemáticos}: $+$, $*$, $/$, $-$, \texttt{mod}, \texttt{div}, $\lceil \cdot \rceil$ (techo), $\lfloor \cdot \rfloor$ (piso)
+\end{itemize}
+
+\subsection{Modalidades de Interacción}
+
+El usuario puede interactuar con el sistema de dos formas:
+
+\begin{enumerate}
+    \item \textbf{Consola Python}: Ejecución directa mediante scripts Python.
+    \item \textbf{Interfaz Gráfica}: Aplicación web desarrollada en React para una experiencia más amigable.
+    \item \textbf{API REST}: Endpoints FastAPI para integración con otros sistemas.
+\end{enumerate}
+
+Las expresiones en lenguaje natural son evaluadas por Gemini 2.5 Flash, actuando como un copiloto inteligente. Mediante ingeniería de prompts, se le proporciona la sintaxis y reglas del pseudocódigo, lo que le permite interpretar y asistir al usuario con su algoritmo de manera efectiva.
+
+\subsection{Metodología de Desarrollo}
+
+La tecnica que aplicamos fue “divide y venceras”. Dividimos el problema de Analizar un algoritmo, en sub problemas. 
+\begin{itemize}
+    \item Recibir el lenguaje natural o código
+    \item Hacer correcciones de sintaxis
+    \item Generar un grafo que representa el código
+    \item Generar una expresión matemática que resume la eficiencia del código
+    \item Aplicar técnicas iterativas (resolver sumatorias y analizar el código) para la complejidad temporal
+    \item Aplicar técnicas recursivas (árboles de recurrencia, teorema maestro, ecuación homogénea y cálculos de sumatorias) para su complejidad temporal
+    \item Para el cálculo espacial miramos las variables extras que no son la entrada de datos y hacemos la sumatoria del total de ellas
+    \item Organizar los resultados y ponerlos en funciones asintóticas apropiadas
+    \item Análisis final y completo por un LLM
+\end{itemize}
+Lo mas dificil fue realizar el caso promedio. Para eso necesitamos un analisis mas profundo del algoritmo para que se pueda sacar las ecuaciones necesarias para poder resolver. Para eso utilizamos los llms, que seran de apoyo para analizar el codigo como un todo.
+
+\section{Arquitectura e Implementación del Sistema}
+
+\subsection{Integración de LLMs}
+
+Los LLMs son utilizados para las siguientes tareas:
+
+\begin{itemize}
+    \item \textbf{Principio de correctitud}: Análisis del código y lenguaje natural
+    \item \textbf{Corrección y validación de sintaxis}: Verificación automática del pseudocódigo
+    \item \textbf{Parseo de lenguaje natural a pseudocódigo}: Conversión inteligente
+    \item \textbf{Auxiliares en la generación de ecuaciones}: Principalmente para el caso promedio
+    \item \textbf{Resultado final}: Análisis del algoritmo en lenguaje natural
+\end{itemize}
+
+Utilizamos \texttt{gemini-2.5-flash} y \texttt{gemini-2.5-flash-lite} (gratuito). Lo implementamos con \textbf{LangGraph}, un framework para crear agentes que utilizan tanto código escrito manualmente como LLMs para mejorar los resultados.
+
+Con una ingeniería de prompts adecuada y utilizando \textit{tools} (herramientas auxiliares que tiene el propio LangGraph), la fiabilidad del LLM puede llegar a ser superior al 90\%.
+
+
+\section{Análisis de Eficiencia del Sistema}
+
+\subsection{Bibliotecas y Herramientas Utilizadas}
+
+Las principales bibliotecas utilizadas son:
+
+\begin{itemize}
+    \item \href{https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash}{Gemini 2.5 Flash}
+    \item \href{https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash-lite}{Gemini 2.5 Flash Lite}
+    \item \href{https://www.sympy.org/en/index.html}{SymPy} -- Para cálculos simbólicos
+\end{itemize}
+
+Cada una tiene su propio costo computacional asociado.
+
+\subsection{Complejidad Temporal del Sistema}
+
+Podemos decir que el costo promedio para nuestra solución es $\Theta(N)$, donde $N$ es la cantidad de líneas de código que se generaron o que se pasaron como entrada.
+
+La ecuación de complejidad vendría a ser:
+
+\[
+T(n) = C_1 \cdot N + C_2 \cdot \text{CostoLLM}
+\]
+
+Esta complejidad aplica para los 3 casos (mejor, peor y promedio).
+
+\subsection{Comparación de Rendimiento}
+
+\begin{itemize}
+    \item \textbf{Modelo más rápido}: Gemini 2.5 Flash Lite, que responde 3 a 4 veces más rápido que Gemini 2.5 Flash.
+    
+    \item \textbf{Comparación manual vs. sistema}: 
+    \begin{itemize}
+        \item En la comparación de análisis manual (mandar un prompt único) vs. utilizar nuestro algoritmo, se notan dos aspectos importantes:
+        \item El tiempo de análisis manual con prompt directo reduce mucho, pero la veracidad de la información también se reduce significativamente.
+        \item Nuestro algoritmo tiene complejidad $O(N)$, pero todos los procesos realizados son para abstraer la información del algoritmo y dejarlo lo más matemático posible, permitiendo que el LLM haga pequeños ajustes en la ecuación generada para los 3 casos.
+    \end{itemize}
+    
+    \item \textbf{Reducción de alucinaciones}: Como trabajamos con agentes, hay LLMs especializados para resolver problemas específicos. En comparación con un LLM normal de aplicativo, que cuanto más se pregunta, más empieza a olvidar o asumir cosas que no son ciertas (lo que reduce su precisión), nuestro sistema mantiene mayor coherencia y precisión.
+\end{itemize}
+
+\section{Pruebas}
+
+Se realizaron pruebas exhaustivas con diversos algoritmos para validar la precisión del sistema:
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\textwidth]{assets/Picture1.png}
+    \caption{Ejemplo de prueba 1}
+    \label{fig:prueba1}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\textwidth]{assets/Picture2.png}
+    \caption{Ejemplo de prueba 2}
+    \label{fig:prueba2}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\textwidth]{assets/Picture3.png}
+    \caption{Ejemplo de prueba 3}
+    \label{fig:prueba3}
+\end{figure}
+
+
+\section{Conclusiones y Recomendaciones}
+
+\subsection{Conclusiones}
+Implementar frameworks mas rápidos que LangGraph para optimizar tiempos de
+respuesta
+Expandir el soporte para más estructuras de datos complejas
+Mejorar la interfaz de usuario con visualizaciones interactivas
+Agregar soporte para análisis de algoritmos paralelos y distribuidos
+En este proyecto se aprende incluso cómo funciona el propio cerebro para hacer el análisis, ya que nos tocó abstraer absolutamente toda nuestra línea de razonamiento para poder pasarla a código. Desde la generación de un AST simplificado, ecuaciones intermediarias, y análisis completo para extraer el caso promedio, fue un ejercicio bien interesante y gratificador que nos hizo reforzar y buscar nuevos conocimientos.
+
+El desarrollo de este sistema permitió:
+
+\begin{itemize}
+    \item Comprender profundamente los conceptos de análisis de algoritmos
+    \item Aplicar técnicas de ingeniería de software modernas
+    \item Integrar inteligencia artificial de manera efectiva en la resolución de problemas complejos
+    \item Crear una herramienta útil para estudiantes y profesionales
+\end{itemize}
+
+\subsection{Recomendaciones para Mejoras Futuras}
+
+Para mejoras futuras, consideramos que podríamos:
+
+\begin{itemize}
+    \item Utilizar otros modelos más especializados en código (como Codex o CodeLlama)
+    \item Implementar frameworks más rápidos que LangGraph para optimizar tiempos de respuesta
+    \item Expandir el soporte para más estructuras de datos complejas
+    \item Mejorar la interfaz de usuario con visualizaciones interactivas
+    \item Agregar soporte para análisis de algoritmos paralelos y distribuidos
+\end{itemize}
+
+
+\section{Codigo}
+\begin{itemize}
+    \item \href{https://github.com/Jhonder18/Agent_Algorithms.git}{Codigo Backend}
+    \item \href{https://github.com/Jhonder18/analizador-complejidades-frontend.git}{Codigo Frontend}
+\end{itemize}
+
+\end{document}
+
+
