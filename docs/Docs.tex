@@ -313,7 +313,7 @@ Podemos decir que el costo promedio para nuestra solución es $\Theta(N)$, donde
 La ecuación de complejidad vendría a ser:
 
 \[
-T(n) = C_1 \cdot N + C_2 \cdot \text{CostoLLM}
+T(n) = C_1 \cdot N + C_2 \cdot \text{CostoLLM} + C_3 \cdot \text{CostoSympy}
 \]
 
 Esta complejidad aplica para los 3 casos (mejor, peor y promedio).
@@ -426,10 +426,10 @@ Este manual está dirigido a personas que quieran \textbf{instalar, configurar o
 
 \begin{enumerate}
     \item Clonar el repositorio del proyecto.
-    \item Crear y activar un entorno virtual de Python.
-    \item Instalar las dependencias con \texttt{pip install -r requirements.txt} (o el archivo equivalente).
-    \item Crear un archivo \texttt{.env} con la API key de Google (\texttt{GOOGLE\_API\_KEY=...}).
-    \item Ejecutar el backend con \texttt{uvicorn app.api:app --reload} (o el comando que definimos en el README).
+    \item Crear y activar un entorno virtual de Python \texttt{uv venv}.
+    \item Instalar las dependencias con \texttt{uv sync} (o el archivo equivalente).
+    \item Crear un archivo \texttt{.env} con la API key de Google (\texttt{GOOGLE\_API\_KEY=...}) y el modelo (\texttt{GEMINI\_MODEL=gemini-2.5-flash}).
+    \item Ejecutar el backend con \texttt{uv run main.py}.
 \end{enumerate}
 
 Si se usa la interfaz en React, se entra a la carpeta del frontend, se ejecuta \texttt{npm install} y luego \texttt{npm run dev} o similar.
