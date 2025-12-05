@@ -126,8 +126,11 @@ class AnalyzerState(TypedDict, total=False):
     # ═══════════════════════════════════════════
     mode: Annotated[Literal["iterativo", "recursivo"], "'iterativo' o 'recursivo'"]
     ast: Annotated[Dict[str, Any], "Árbol sintáctico abstracto"]
-    sumatoria: Annotated[str, "Expresión de sumatoria para flujo iterativo/recursivo"]
-    # Resultados intermedios
+    sumatoria: Annotated[str, "Expresión de sumatoria para flujo iterativo"]
+    
+    costos_mejor: Annotated[CostoLineaLineaMejor, "Costos línea a línea para caso mejor"]
+    costos_peor: Annotated[CostoLineaLineaPeor, "Costos línea a línea para caso peor"]
+    # Validación
     validation: Optional[Annotated[Dict[str, Any], "Validación del pseudocódigo"]]
     
     # ═══════════════════════════════════════════
