@@ -899,6 +899,24 @@ def analyze_recurrence(recurrence: str) -> RecurrenceAnalysis:
         primary_result = solve_by_substitution(info)
         all_results.append(primary_result)
     
+    # SIEMPRE generar diagrama Mermaid (excepto F4 que es lineal)
+    # Esto es independiente del método usado para resolver
+    if info.tipo != "F4" and primary_result and not primary_result.mermaid_diagram:
+        # Generar diagrama aunque el método principal no sea árbol de recursión
+        if info.tipo == "F6":
+            mermaid = generate_fibonacci_tree_diagram(info, depth=4)
+        else:
+            mermaid = generate_tree_diagram(info, depth=3)
+        # Añadir el diagrama al resultado primario
+        primary_result = MethodResult(
+            method=primary_result.method,
+            applicable=primary_result.applicable,
+            complexity=primary_result.complexity,
+            steps=primary_result.steps,
+            explanation=primary_result.explanation,
+            mermaid_diagram=mermaid
+        )
+    
     return RecurrenceAnalysis(
         recurrence_info=info,
         applicable_methods=applicable,
