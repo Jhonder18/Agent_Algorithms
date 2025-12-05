@@ -116,11 +116,13 @@ SYSTEM_PROMPT = """Eres un experto en análisis de complejidad espacial de algor
 def analyze_space_from_recurrence(recurrence: str, classification: str) -> Dict[str, Any]:
     """
     Analiza el espacio basándose en la recurrencia.
+    Ahora usa RecurrenceInfo en lugar de diccionario.
     """
-    params = parse_recurrence(recurrence)
-    a = params["a"]
-    b = params["b"]
-    rec_type = params["recurrence_type"]
+    info = parse_recurrence(recurrence)
+    a = info.a or 1
+    b = info.b or 1
+    is_division = info.is_division
+    rec_type = info.tipo  # F0, F1, F2, F3, F4, F5, F6
     
     result = {
         "recursion_depth": "",
@@ -131,11 +133,11 @@ def analyze_space_from_recurrence(recurrence: str, classification: str) -> Dict[
     }
     
     # Determinar profundidad según el tipo
-    if rec_type == "divide_and_conquer":
-        result["recursion_depth"] = f"O(log_{b}(n))" if b > 2 else "O(log n)"
-        result["explanation"].append(f"La recursión divide el problema por {b}, profundidad = log_{b}(n)")
+    if rec_type in ["F0", "F1", "F2", "F3"]:  # Divide and Conquer
+        result["recursion_depth"] = f"O(log_{int(b)}(n))" if b > 2 else "O(log n)"
+        result["explanation"].append(f"La recursión divide el problema por {int(b)}, profundidad = log_{int(b)}(n)")
         
-        # Para divide and conquer, puede haber espacio auxiliar
+        # Para divide and conquer con múltiples llamadas, puede haber espacio auxiliar
         if a >= 2:
             result["auxiliary_space"] = "O(n)"  # Típico de merge sort
             result["explanation"].append("Algoritmos tipo merge requieren espacio auxiliar O(n)")
@@ -143,18 +145,12 @@ def analyze_space_from_recurrence(recurrence: str, classification: str) -> Dict[
         else:
             result["total_space"] = "O(log n)"
             
-    elif rec_type == "decrease_and_conquer":
+    elif rec_type in ["F4", "F5"]:  # Decrease and Conquer
         result["recursion_depth"] = "O(n)"
         result["explanation"].append("La recursión resta una constante, profundidad = O(n)")
         result["total_space"] = "O(n)"
         
-    elif rec_type == "decrease_and_lose":
-        result["recursion_depth"] = "O(n)"
-        result["explanation"].append(f"Múltiples llamadas ({a}) pero solo un camino activo en la pila")
-        result["total_space"] = "O(n)"
-        
-    elif rec_type == "multiple_recursive":
-        # Fibonacci-like
+    elif rec_type == "F6":  # Fibonacci-like (was "multiple_recursive" or "decrease_and_lose")
         result["recursion_depth"] = "O(n)"
         result["explanation"].append("Tipo Fibonacci: profundidad = n (rama más larga)")
         result["explanation"].append("Aunque hay ~2^n llamadas totales, solo O(n) frames simultáneos")

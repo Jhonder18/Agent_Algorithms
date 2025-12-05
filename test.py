@@ -7,7 +7,6 @@ state["nl_description"] = """dame el algoritmo del fibonacci recursivo"""
 graph = build_graph().compile()
 
 for event in graph.stream(state):
-    print(state.keys(state))
     print(event)
 
 # print("RESULTADO FINAL")
