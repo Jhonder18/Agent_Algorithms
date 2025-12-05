@@ -1,0 +1,418 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{geometry}
+\usepackage{fancyhdr}
+\usepackage{tocloft}
+
+\geometry{left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm}
+
+% Configuración de colores para código
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2
+}
+
+\lstset{style=mystyle}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Manual Técnico}
+\lhead{Analizador de Algoritmos}
+\rfoot{Página \thepage}
+
+\title{\textbf{Manual Técnico\\Analizador de Algoritmos\\Sistema de Análisis de Complejidad Algorítmica}}
+\author{Universidad de Caldas\\Análisis de Algoritmos}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\newpage
+
+\tableofcontents
+\newpage
+
+\section{Introducción}
+
+\subsection{Propósito del Sistema}
+Analizador de Algoritmos es un sistema inteligente basado en agentes que utiliza modelos de lenguaje (LLM) para analizar la complejidad algorítmica de código Python. El sistema emplea arquitectura de grafos con LangGraph y el modelo Gemini 2.5 Flash de Google para determinar automáticamente la complejidad temporal y espacial de algoritmos iterativos y recursivos.
+
+\subsection{Alcance}
+Este manual técnico documenta la arquitectura, componentes, configuración y funcionamiento interno del sistema Analizador de Algoritmos versión 0.1.0.
+
+\subsection{Audiencia}
+Este documento está dirigido a desarrolladores, ingenieros de software y personal técnico que necesite comprender, mantener o extender el sistema.
+
+\section{Arquitectura del Sistema}
+
+\subsection{Visión General}
+El sistema está construido con una arquitectura de agentes basada en grafos, donde cada nodo representa una tarea específica en el flujo de análisis. La arquitectura utiliza:
+
+\begin{itemize}
+    \item \textbf{LangGraph}: Framework para orquestar flujos de agentes
+    \item \textbf{Google Gemini 2.5 Flash}: Modelo de lenguaje para procesamiento
+    \item \textbf{FastAPI}: Backend para exponer servicios REST
+    \item \textbf{Python 3.12}: Lenguaje base del sistema
+\end{itemize}
+
+\subsection{Componentes Principales}
+
+\subsubsection{Módulo de Agentes (\texttt{app/agents})}
+Contiene toda la lógica de procesamiento mediante agentes:
+
+\begin{itemize}
+    \item \textbf{graph.py}: Define el grafo de ejecución de agentes
+    \item \textbf{state.py}: Maneja el estado compartido entre nodos
+    \item \textbf{nodes/}: Nodos individuales del grafo
+    \item \textbf{llms/}: Configuración de modelos de lenguaje
+    \item \textbf{tools/}: Herramientas para análisis iterativo y recursivo
+    \item \textbf{prompts/}: Templates de prompts para el LLM
+    \item \textbf{utils/}: Utilidades para análisis sintáctico
+\end{itemize}
+
+\section{Requisitos del Sistema}
+
+\subsection{Requisitos de Software}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Componente} & \textbf{Versión/Requisito} \\
+\hline
+Python & 3.12 \\
+google-genai & Última versión \\
+python-dotenv & Última versión \\
+sympy & Última versión \\
+lark & Última versión \\
+langchain & Última versión \\
+langchain-google-genai & Última versión \\
+langgraph & Última versión \\
+langsmith & Última versión \\
+fastapi[standard] & Última versión \\
+matplotlib & >= 3.10.7 \\
+ipython & >= 9.7.0 \\
+\hline
+\end{tabular}
+\caption{Dependencias del proyecto}
+\end{table}
+
+\subsection{Requisitos de Hardware}
+\begin{itemize}
+    \item Procesador: Mínimo I5-8va generación (O similares)
+    \item RAM: Mínimo 8 GB
+    \item Almacenamiento: 500 MB libres
+    \item Conexión a Internet: Requerida para API de Google Gemini
+\end{itemize}
+
+\section{Configuración del Sistema}
+
+\subsection{Variables de Entorno}
+El sistema requiere configuración mediante archivo \texttt{.env}:
+
+\begin{lstlisting}[language=bash, caption=Configuración .env]
+GOOGLE_API_KEY=<api-key>
+GEMINI_MODEL=gemini-2.5-flash
+\end{lstlisting}
+
+\textbf{Parámetros:}
+\begin{itemize}
+    \item \texttt{GOOGLE\_API\_KEY}: Clave de API de Google Cloud para acceso a Gemini
+    \item \texttt{GEMINI\_MODEL}: Modelo específico de Gemini a utilizar
+\end{itemize}
+
+\subsection{Configuración del Proyecto}
+El archivo \texttt{pyproject.toml} define los metadatos y dependencias:
+
+\begin{lstlisting}[language=bash, caption=pyproject.toml]
+[project]
+name = "agent-algorithms"
+version = "0.1.0"
+description = "Sistema de analisis de complejidad algoritmica"
+readme = "README.md"
+requires-python = ">=3.12"
+\end{lstlisting}
+
+\section{Componentes Detallados}
+
+\subsection{Nodos del Grafo de Agentes}
+
+\subsubsection{initial\_decision.py}
+\textbf{Función}: Determina si el algoritmo es iterativo o recursivo.\\
+\textbf{Entrada}: Código Python\\
+\textbf{Salida}: Tipo de algoritmo detectado
+
+\subsubsection{parse\_nl\_code.py}
+\textbf{Función}: Convierte lenguaje natural a código ejecutable.\\
+\textbf{Entrada}: Descripción en lenguaje natural\\
+\textbf{Salida}: Código Python válido
+
+\subsubsection{ast\_node.py}
+\textbf{Función}: Genera el árbol sintáctico abstracto (AST).\\
+\textbf{Entrada}: Código Python\\
+\textbf{Salida}: Representación AST
+
+\subsubsection{code\_description.py}
+\textbf{Función}: Genera descripción detallada del código.\\
+\textbf{Entrada}: Código Python\\
+\textbf{Salida}: Descripción textual del funcionamiento
+
+\subsubsection{validate.py}
+\textbf{Función}: Valida la sintaxis y estructura del código.\\
+\textbf{Entrada}: Código Python\\
+\textbf{Salida}: Estado de validación
+
+\subsubsection{Nodos de Análisis Iterativo}
+\begin{itemize}
+    \item \texttt{iterativo\_temporal.py}: Analiza complejidad temporal O(n)
+    \item \texttt{iterativo\_espacial.py}: Analiza complejidad espacial O(n)
+\end{itemize}
+
+\subsubsection{Nodos de Análisis Recursivo}
+\begin{itemize}
+    \item \texttt{recursivo\_temporal.py}: Analiza complejidad temporal recursiva
+    \item \texttt{recursivo\_espacial.py}: Analiza complejidad espacial recursiva
+    \item \texttt{recursivo\_recurrence.py}: Resuelve relaciones de recurrencia
+\end{itemize}
+
+\subsubsection{result.py}
+\textbf{Función}: Consolida y presenta resultados finales.\\
+\textbf{Salida}: Informe completo de complejidad
+
+\subsection{Módulo LLMs}
+
+\subsubsection{gemini.py}
+Configuración base del modelo Gemini sin herramientas adicionales.
+
+\subsubsection{geminiWithTools.py}
+Configuración del modelo Gemini con capacidad de usar herramientas (function calling).
+
+\subsection{Sistema de Prompts}
+
+El sistema utiliza prompts estructurados en Markdown organizados por:
+
+\begin{itemize}
+    \item \texttt{NL\_TO\_CODE.md}: Conversión de lenguaje natural a código
+    \item \texttt{SINTAXE.md}: Validación de sintaxis
+    \item \texttt{GENERAR\_RESULT.md}: Generación de resultados
+    \item \texttt{iterativos/}: Prompts para análisis iterativo
+    \begin{itemize}
+        \item Temporal: Mejor caso, caso promedio, peor caso
+        \item Espacial: Mejor caso, caso promedio, peor caso
+    \end{itemize}
+\end{itemize}
+
+\subsection{Herramientas (Tools)}
+
+\subsubsection{tools\_iterativas.py}
+Proporciona funciones especializadas para:
+\begin{itemize}
+    \item Contar operaciones en bucles
+    \item Analizar estructuras iterativas anidadas
+    \item Calcular complejidad temporal y espacial iterativa
+\end{itemize}
+
+\subsubsection{tools\_recursivas.py}
+Proporciona funciones para:
+\begin{itemize}
+    \item Identificar casos base
+    \item Detectar llamadas recursivas
+    \item Formular relaciones de recurrencia
+    \item Aplicar Teorema Maestro
+\end{itemize}
+
+\subsection{Utilidades}
+
+\subsubsection{generate\_ast.py}
+Genera el árbol sintáctico abstracto usando el parser de Python.
+
+\subsubsection{generate\_sum.py}
+Genera expresiones matemáticas para sumatorias de complejidad.
+
+\subsubsection{costo\_lineas.py}
+Calcula el costo computacional de líneas individuales de código.
+
+\subsubsection{lark.txt}
+Gramática Lark para parsing personalizado de estructuras algorítmicas.
+
+\section{Flujo de Ejecución}
+
+\subsection{Flujo General}
+
+\begin{enumerate}
+    \item \textbf{Entrada}: Usuario proporciona código o descripción
+    \item \textbf{Decisión Inicial}: Sistema determina tipo de algoritmo
+    \item \textbf{Parsing}: Conversión a código válido (si es necesario)
+    \item \textbf{Validación}: Verificación de sintaxis y estructura
+    \item \textbf{Generación AST}: Construcción del árbol sintáctico
+    \item \textbf{Análisis}: Rama iterativa o recursiva según tipo
+    \item \textbf{Cálculo}: Determinación de complejidades
+    \item \textbf{Resultado}: Generación de informe final
+\end{enumerate}
+
+\subsection{Diagrama de Estados}
+
+El grafo de agentes implementa un autómata finito donde cada nodo representa un estado de procesamiento y las transiciones están determinadas por el resultado del nodo anterior.
+
+\section{API y Endpoints}
+
+El sistema expone servicios REST mediante FastAPI:
+
+\begin{lstlisting}[language=Python, caption=Ejemplo de endpoint]
+POST /analyze
+Content-Type: application/json
+
+{
+    "code": "def fibonacci(n): ...",
+    "type": "recursive"
+}
+\end{lstlisting}
+
+\section{Consideraciones de Seguridad}
+
+\subsection{Protección de API Keys}
+\begin{itemize}
+    \item Las claves API deben almacenarse en \texttt{.env}
+    \item Nunca commitear el archivo \texttt{.env} a repositorios
+    \item Rotar claves periódicamente
+\end{itemize}
+
+\subsection{Validación de Entrada}
+El sistema valida todo código antes de ejecutar para prevenir:
+\begin{itemize}
+    \item Inyección de código malicioso
+    \item Bucles infinitos
+    \item Consumo excesivo de recursos
+\end{itemize}
+
+\section{Mantenimiento y Troubleshooting}
+
+\subsection{Logs del Sistema}
+Los logs se generan automáticamente y deben revisarse ante errores.
+
+\subsection{Problemas Comunes}
+
+\subsubsection{Error de API Key}
+\textbf{Síntoma}: Error de autenticación con Gemini\\
+\textbf{Solución}: Verificar \texttt{GOOGLE\_API\_KEY} en \texttt{.env}
+
+\subsubsection{Timeout del LLM}
+\textbf{Síntoma}: Timeout en respuestas de Gemini\\
+\textbf{Solución}: Aumentar timeout o simplificar entrada
+
+\subsubsection{Error de Parsing}
+\textbf{Síntoma}: Fallo al generar AST\\
+\textbf{Solución}: Validar sintaxis del código de entrada
+
+\section{Extensión del Sistema}
+
+\subsection{Agregar Nuevos Nodos}
+\begin{enumerate}
+    \item Crear archivo en \texttt{app/agents/nodes/}
+    \item Implementar función con firma estándar
+    \item Registrar en \texttt{graph.py}
+    \item Actualizar \texttt{state.py} si es necesario
+\end{enumerate}
+
+\subsection{Agregar Nuevas Herramientas}
+\begin{enumerate}
+    \item Definir función en \texttt{tools/}
+    \item Documentar con docstring
+    \item Registrar en configuración del LLM
+\end{enumerate}
+
+\section{Referencias}
+
+\begin{itemize}
+    \item LangChain Documentation: \url{https://python.langchain.com/}
+    \item LangGraph Documentation: \url{https://langchain-ai.github.io/langgraph/}
+    \item Google Gemini API: \url{https://ai.google.dev/}
+    \item FastAPI Documentation: \url{https://fastapi.tiangolo.com/}
+\end{itemize}
+
+\section{Apéndices}
+
+\subsection{Apéndice A: Estructura de Directorios Completa}
+\begin{lstlisting}[language=bash, caption=Estructura del proyecto]
+Agent_Algorithms/
+|-- app/
+|   |-- agents/
+|       |-- __init__.py
+|       |-- graph.py
+|       |-- state.py
+|       |-- llms/
+|       |   |-- gemini.py
+|       |   |-- geminiWithTools.py
+|       |-- nodes/
+|       |   |-- __init__.py
+|       |   |-- ast_node.py
+|       |   |-- code_description.py
+|       |   |-- initial_decision.py
+|       |   |-- iterativo_espacial.py
+|       |   |-- iterativo_temporal.py
+|       |   |-- parse_nl_code.py
+|       |   |-- recursivo_espacial.py
+|       |   |-- recursivo_recurrence.py
+|       |   |-- recursivo_temporal.py
+|       |   |-- result.py
+|       |   |-- validate.py
+|       |-- prompts/
+|       |   |-- __init__.py
+|       |   |-- GENERAR_RESULT.md
+|       |   |-- NL_TO_CODE.md
+|       |   |-- SINTAXE.md
+|       |   |-- iterativos/
+|       |       |-- espacial/
+|       |       |   |-- CASO_PROMEDIO.md
+|       |       |   |-- MEJOR_CASO.md
+|       |       |   |-- PEOR_CASO.md
+|       |       |-- temporal/
+|       |           |-- CASO_PROMEDIO.md
+|       |           |-- MEJOR_CASO.md
+|       |           |-- PEOR_CASO.md
+|       |-- tools/
+|       |   |-- tools_iterativas.py
+|       |   |-- tools_recursivas.py
+|       |-- utils/
+|           |-- costo_lineas.py
+|           |-- generate_ast.py
+|           |-- generate_sum.py
+|           |-- lark.txt
+|-- .env
+|-- .python-version
+|-- pyproject.toml
+\end{lstlisting}
+
+\subsection{Apéndice B: Glosario}
+\begin{description}
+    \item[AST] Abstract Syntax Tree - Árbol sintáctico abstracto
+    \item[LLM] Large Language Model - Modelo de lenguaje grande
+    \item[API] Application Programming Interface
+    \item[REST] Representational State Transfer
+\end{description}
+
+\end{document}
