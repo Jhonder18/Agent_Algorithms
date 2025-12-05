@@ -1,4 +1,8 @@
 # app/api.py
+import os
+# Deshabilitar LangSmith tracing para mejor performance en API
+os.environ["LANGSMITH_TRACING"] = "false"
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Any, Dict, List
@@ -70,9 +74,7 @@ def analyze(in_: AnalyzeIn):
         result = graph.invoke(state)
         
         # Convertir el resultado a un formato JSON-serializable
-        serializable_result = make_json_serializable(result)
-        
-        print(serializable_result)
+        serializable_result = make_json_serializable(result)        
         return serializable_result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

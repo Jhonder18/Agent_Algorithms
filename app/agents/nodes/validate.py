@@ -22,7 +22,7 @@ def validate_node(state: AnalyzerState) -> AnalyzerState:
     """ 
     code = state["pseudocode"]  # type: ignore
     PROMPT_VALIDATE = ""
-    with open("./app/agents/prompts/SINTAXE.md", "r") as f:
+    with open("./app/agents/prompts/SINTAXE.md", "r", encoding="utf-8") as f:
         PROMPT_VALIDATE = f.read()
     gemini_validate = get_gemini_model()
     system_message = SystemMessage(content=PROMPT_VALIDATE)
@@ -30,7 +30,7 @@ def validate_node(state: AnalyzerState) -> AnalyzerState:
     output_validated = gemini_validate.with_structured_output(ValidationResult)
     response = output_validated.invoke([system_message, human_message])
     PROMPT_FIX = ""
-    with open("./app/agents/prompts/NL_TO_CODE.md", "r") as f:
+    with open("./app/agents/prompts/NL_TO_CODE.md", "r", encoding="utf-8") as f:
         PROMPT_FIX = f.read()
     gemini_fix = get_gemini_model()
     output_fix = gemini_fix.with_structured_output(CodeFixed)

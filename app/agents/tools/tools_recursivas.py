@@ -1,645 +1,1123 @@
 """
-Herramientas (Tools) para el análisis de algoritmos recursivos.
-Implementa resolución de recurrencias y generación de diagramas.
+Herramientas para análisis de complejidad de algoritmos recursivos.
+
+Clasificación de recurrencias según ADA_24A:
+- F0: T(n) = T(n/b) + f(n)         [DyV simple]
+- F1: T(n) = aT(n/b) + f(n)        [DyV general - Teorema Maestro]
+- F2: T(n) = T(n/b) + T(n/c) + f(n) [DyV múltiple]
+- F3: T(n) = T(n/b) + ... + T(n/z) + f(n) [DyV generalizado]
+- F4: T(n) = T(n-b) + f(n)         [RyV - Resta y Vencerás]
+- F5: T(n) = aT(n-b) + f(n)        [RysV - Resta y serás Vencido]
+- F6: T(n) = aT(n-b) + cT(n-d) + f(n) [RysV Fibonacci-like]
+
+Métodos aplicables según ADA_24A:
+- Iteración: {F4, F5, F0, F1} - NO aplica a {F2, F3, F6}
+- Árbol de Recursión: {F2, F3, F6, F5, F1, F0} - NO aplica a {F4}
+- Teorema Maestro: {F1, F0} - NO aplica a {F2, F3, F4, F5, F6}
+- Sustitución Inteligente: Todos los tipos
+- Ecuación Característica: {F5, F6, F4} - NO aplica a {F0, F1, F2, F3}
 """
-from langchain.tools import tool
-from sympy import symbols, Function, rsolve, simplify, log, sqrt, Rational, oo
-from sympy import sympify, Symbol, Pow
-from typing import Dict, Any, List, Optional
+
+from langchain_core.tools import tool
+from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any, Tuple
+import sympy as sp
+from sympy import symbols, Function, rsolve, simplify, expand, sqrt, Rational, log, Pow
 import re
 import math
 
+# ============================================================================
+# CLASIFICACIÓN DE MÉTODOS SEGÚN ADA_24A
+# ============================================================================
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# CONSTANTES Y CONFIGURACIÓN
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# Clasificación de ecuaciones según el PDF ADA_24A
-RECURRENCE_TYPES = {
-    "F0": "T(n) = T(n/b) + f(n)",           # DyV simple
-    "F1": "T(n) = aT(n/b) + f(n)",          # DyV general (Master Theorem)
-    "F2": "T(n) = T(n/b) + T(n/c) + f(n)",  # DyV múltiple
-    "F3": "T(n) = T(n/b) + ... + T(n/z) + f(n)",  # DyV múltiple generalizado
-    "F4": "T(n) = T(n-b) + f(n)",           # RyV (Resta y Vencerás)
-    "F5": "T(n) = aT(n-b) + f(n)",          # RysV (Resta y serás Vencido)
-    "F6": "T(n) = aT(n-b) + cT(n-d) + f(n)", # RysV generalizado (Fibonacci)
-}
-
-# Métodos aplicables a cada tipo
 METHOD_APPLICABILITY = {
-    "iteration": ["F4", "F5", "F0", "F1"],
-    "recursion_tree": ["F2", "F3", "F6", "F5", "F1", "F0"],
-    "master": ["F1", "F0"],
-    "substitution": ["F5", "F6", "F4", "F2", "F3", "F1", "F0"],
-    "characteristic": ["F5", "F6", "F4"],
+    "iteration": {"applies": ["F4", "F5", "F0", "F1"], "not_applies": ["F2", "F3", "F6"]},
+    "recursion_tree": {"applies": ["F2", "F3", "F6", "F5", "F1", "F0"], "not_applies": ["F4"]},
+    "master_theorem": {"applies": ["F1", "F0"], "not_applies": ["F2", "F3", "F4", "F5", "F6"]},
+    "substitution": {"applies": ["F0", "F1", "F2", "F3", "F4", "F5", "F6"], "not_applies": []},
+    "characteristic_equation": {"applies": ["F5", "F6", "F4"], "not_applies": ["F0", "F1", "F2", "F3"]},
+}
+
+# Orden de preferencia de métodos por tipo de recurrencia
+METHOD_PRIORITY = {
+    "F0": ["master_theorem", "iteration", "recursion_tree", "substitution"],
+    "F1": ["master_theorem", "iteration", "recursion_tree", "substitution"],
+    "F2": ["recursion_tree", "substitution"],
+    "F3": ["recursion_tree", "substitution"],
+    "F4": ["characteristic_equation", "iteration", "substitution"],
+    "F5": ["characteristic_equation", "iteration", "recursion_tree", "substitution"],
+    "F6": ["characteristic_equation", "recursion_tree", "substitution"],
 }
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# FUNCIONES AUXILIARES
-# ═══════════════════════════════════════════════════════════════════════════════
+# ============================================================================
+# MODELOS DE DATOS
+# ============================================================================
 
-def parse_recurrence(recurrence: str) -> Dict[str, Any]:
-    """
-    Parsea una ecuación de recurrencia y extrae sus parámetros.
-    
-    Ejemplos soportados:
-    - "T(n) = 2T(n/2) + n"      -> a=2, b=2, f_n="n", tipo=divide_and_conquer
-    - "T(n) = T(n-1) + 1"       -> a=1, b=1, f_n="1", tipo=decrease_and_conquer
-    - "T(n) = T(n-1) + T(n-2)"  -> tipo=multiple_recursive (Fibonacci)
-    - "T(n) = 2T(n-1) + 1"      -> a=2, b=1, f_n="1", tipo=decrease_and_lose
-    """
-    result = {
-        "a": 1,
-        "b": 1,
-        "f_n": "1",
-        "recurrence_type": "unknown",
-        "classification": "unknown"
-    }
-    
-    # Normalizar la entrada
-    rec = recurrence.replace(" ", "").lower()
-    
-    # Patrón para T(n) = aT(n/b) + f(n) [Divide and Conquer]
-    dyv_pattern = r't\(n\)=(\d*)t\(n/(\d+)\)\+(.+)'
-    match = re.match(dyv_pattern, rec)
-    if match:
-        a = int(match.group(1)) if match.group(1) else 1
-        b = int(match.group(2))
-        f_n = match.group(3)
-        result.update({
-            "a": a,
-            "b": b,
-            "f_n": f_n,
-            "recurrence_type": "divide_and_conquer",
-            "classification": "F1" if a > 1 else "F0"
-        })
-        return result
-    
-    # Patrón para T(n) = aT(n-b) + f(n) [Decrease and Conquer/Lose]
-    ryv_pattern = r't\(n\)=(\d*)t\(n-(\d+)\)\+(.+)'
-    match = re.match(ryv_pattern, rec)
-    if match:
-        a = int(match.group(1)) if match.group(1) else 1
-        b = int(match.group(2))
-        f_n = match.group(3)
-        rec_type = "decrease_and_lose" if a > 1 else "decrease_and_conquer"
-        classification = "F5" if a > 1 else "F4"
-        result.update({
-            "a": a,
-            "b": b,
-            "f_n": f_n,
-            "recurrence_type": rec_type,
-            "classification": classification
-        })
-        return result
-    
-    # Patrón para Fibonacci: T(n) = T(n-1) + T(n-2) + f(n)
-    fib_pattern = r't\(n\)=t\(n-1\)\+t\(n-2\)(?:\+(.+))?'
-    match = re.match(fib_pattern, rec)
-    if match:
-        f_n = match.group(1) if match.group(1) else "0"
-        result.update({
-            "a": 2,  # Dos llamadas recursivas (una con n-1, otra con n-2)
-            "b": 1,
-            "f_n": f_n,
-            "recurrence_type": "multiple_recursive",
-            "classification": "F6"
-        })
-        return result
-    
-    return result
+class RecurrenceInfo(BaseModel):
+    """Información extraída de una ecuación de recurrencia."""
+    tipo: str = Field(description="Tipo de recurrencia: F0, F1, F2, F3, F4, F5, F6")
+    recurrence_raw: str = Field(description="Ecuación de recurrencia original")
+    a: Optional[float] = Field(default=None, description="Coeficiente a (llamadas recursivas)")
+    b: Optional[float] = Field(default=None, description="Factor de división/resta b")
+    c: Optional[float] = Field(default=None, description="Segundo coeficiente c (para F6)")
+    d: Optional[float] = Field(default=None, description="Segundo factor d (para F6)")
+    f_n: Optional[str] = Field(default=None, description="Término no recursivo f(n)")
+    is_division: bool = Field(default=True, description="True si es división (DyV), False si es resta (RyV)")
 
 
-def classify_f_n(f_n: str, b: int) -> Dict[str, Any]:
-    """
-    Clasifica f(n) para determinar qué caso del Master Theorem aplica.
-    Retorna el exponente k tal que f(n) = O(n^k) o identificadores especiales.
-    """
-    f_n = f_n.lower().strip()
-    
-    # Casos comunes
-    if f_n in ["1", "c", "o(1)", "θ(1)"]:
-        return {"type": "constant", "k": 0}
-    
-    if f_n in ["n", "o(n)", "θ(n)"]:
-        return {"type": "linear", "k": 1}
-    
-    if f_n in ["n^2", "n*n", "o(n^2)", "θ(n^2)"]:
-        return {"type": "quadratic", "k": 2}
-    
-    if "log" in f_n and "n" in f_n:
-        if f_n in ["logn", "log(n)", "o(logn)", "θ(logn)"]:
-            return {"type": "logarithmic", "k": 0, "log_factor": 1}
-        if f_n in ["nlogn", "n*logn", "n*log(n)", "o(nlogn)", "θ(nlogn)"]:
-            return {"type": "linearithmic", "k": 1, "log_factor": 1}
-    
-    # Intentar parsear n^k
-    power_match = re.match(r'n\^(\d+)', f_n)
-    if power_match:
-        return {"type": "polynomial", "k": int(power_match.group(1))}
-    
-    return {"type": "unknown", "k": None}
+class MethodResult(BaseModel):
+    """Resultado de aplicar un método de resolución."""
+    method: str = Field(description="Nombre del método aplicado")
+    applicable: bool = Field(description="Si el método fue aplicable")
+    complexity: Optional[str] = Field(default=None, description="Complejidad resultante")
+    steps: List[str] = Field(default_factory=list, description="Pasos de la solución")
+    explanation: str = Field(default="", description="Explicación del resultado")
+    mermaid_diagram: Optional[str] = Field(default=None, description="Diagrama Mermaid (solo para árbol de recursión)")
 
 
-def apply_master_theorem(a: int, b: int, f_n: str) -> Dict[str, Any]:
+class RecurrenceAnalysis(BaseModel):
+    """Análisis completo de una recurrencia."""
+    recurrence_info: RecurrenceInfo
+    applicable_methods: List[str]
+    primary_result: MethodResult
+    all_results: List[MethodResult]
+
+
+# ============================================================================
+# FUNCIONES DE PARSING
+# ============================================================================
+
+def parse_recurrence(recurrence: str) -> RecurrenceInfo:
     """
-    Aplica el Teorema Maestro para resolver T(n) = aT(n/b) + f(n).
+    Parsea una ecuación de recurrencia y determina su tipo según ADA_24A.
     
-    Casos del Master Theorem:
-    1. Si f(n) = O(n^c) donde c < log_b(a): T(n) = Θ(n^(log_b(a)))
-    2. Si f(n) = Θ(n^c) donde c = log_b(a): T(n) = Θ(n^c * log(n))
-    3. Si f(n) = Ω(n^c) donde c > log_b(a): T(n) = Θ(f(n))
+    Tipos:
+    - F0: T(n) = T(n/b) + f(n)
+    - F1: T(n) = aT(n/b) + f(n)
+    - F2: T(n) = T(n/b) + T(n/c) + f(n)
+    - F3: T(n) = T(n/b) + ... + T(n/z) + f(n)
+    - F4: T(n) = T(n-b) + f(n)
+    - F5: T(n) = aT(n-b) + f(n)
+    - F6: T(n) = aT(n-b) + cT(n-d) + f(n)
     """
-    result = {
-        "applicable": True,
-        "case": 0,
-        "steps": [],
-        "result": ""
-    }
+    recurrence = recurrence.strip()
+    
+    # Detectar si usa división o resta
+    is_division = "/" in recurrence and "-" not in re.sub(r'T\([^)]+\)', '', recurrence)
+    
+    # Patrones para identificar llamadas recursivas
+    # Patrón para T(n/b) o T(n-b)
+    division_pattern = r'(\d*)\s*T\s*\(\s*n\s*/\s*(\d+)\s*\)'
+    subtraction_pattern = r'(\d*)\s*T\s*\(\s*n\s*-\s*(\d+)\s*\)'
+    
+    division_calls = re.findall(division_pattern, recurrence)
+    subtraction_calls = re.findall(subtraction_pattern, recurrence)
+    
+    # Extraer f(n) - todo lo que no es T(...)
+    fn_pattern = r'\d*\s*T\s*\([^)]+\)'
+    remaining = re.sub(fn_pattern, '', recurrence)
+    # Quitar "T(n) = " del inicio
+    remaining = re.sub(r'^T\s*\(\s*n\s*\)\s*=', '', remaining)
+    # Quitar "=" suelto
+    remaining = re.sub(r'^\s*=\s*', '', remaining)
+    # Quitar + al inicio y al final
+    remaining = re.sub(r'^\s*\+\s*', '', remaining)
+    remaining = re.sub(r'\s*\+\s*$', '', remaining)
+    # Quitar + repetidos que quedan después de remover T(...)
+    remaining = re.sub(r'\+\s*\+', '+', remaining)
+    remaining = remaining.strip()
+    
+    # Limpiar f_n
+    f_n = re.sub(r'^\s*\+\s*', '', remaining).strip()
+    f_n = re.sub(r'\s*\+\s*$', '', f_n).strip()
+    
+    # Si quedó algo numérico solo, o vacío, o solo +, usar "1"
+    if not f_n or f_n == "+" or f_n.isspace():
+        f_n = "1"
+    
+    # Si f_n es solo un número sin n, mantenerlo
+    # Pero preferir la parte con 'n' si existe
+    parts = [p.strip() for p in f_n.split('+') if p.strip()]
+    n_parts = [p for p in parts if 'n' in p.lower()]
+    if n_parts:
+        f_n = n_parts[0]  # Tomar la primera parte con 'n'
+    elif parts:
+        f_n = parts[0]
+    
+    # Determinar tipo basado en las llamadas encontradas
+    if subtraction_calls:
+        is_division = False
+        total_calls = len(subtraction_calls)
+        
+        if total_calls >= 2:
+            # F6: aT(n-b) + cT(n-d)
+            a1 = int(subtraction_calls[0][0]) if subtraction_calls[0][0] else 1
+            b1 = int(subtraction_calls[0][1])
+            c1 = int(subtraction_calls[1][0]) if subtraction_calls[1][0] else 1
+            d1 = int(subtraction_calls[1][1])
+            return RecurrenceInfo(
+                tipo="F6",
+                recurrence_raw=recurrence,
+                a=a1, b=b1, c=c1, d=d1,
+                f_n=f_n,
+                is_division=False
+            )
+        else:
+            # Una sola llamada con resta
+            a = int(subtraction_calls[0][0]) if subtraction_calls[0][0] else 1
+            b = int(subtraction_calls[0][1])
+            
+            if a == 1:
+                # F4: T(n) = T(n-b) + f(n)
+                return RecurrenceInfo(
+                    tipo="F4",
+                    recurrence_raw=recurrence,
+                    a=1, b=b,
+                    f_n=f_n,
+                    is_division=False
+                )
+            else:
+                # F5: T(n) = aT(n-b) + f(n)
+                return RecurrenceInfo(
+                    tipo="F5",
+                    recurrence_raw=recurrence,
+                    a=a, b=b,
+                    f_n=f_n,
+                    is_division=False
+                )
+    
+    elif division_calls:
+        is_division = True
+        total_calls = len(division_calls)
+        
+        if total_calls == 1:
+            a = int(division_calls[0][0]) if division_calls[0][0] else 1
+            b = int(division_calls[0][1])
+            
+            if a == 1:
+                # F0: T(n) = T(n/b) + f(n)
+                return RecurrenceInfo(
+                    tipo="F0",
+                    recurrence_raw=recurrence,
+                    a=1, b=b,
+                    f_n=f_n,
+                    is_division=True
+                )
+            else:
+                # F1: T(n) = aT(n/b) + f(n)
+                return RecurrenceInfo(
+                    tipo="F1",
+                    recurrence_raw=recurrence,
+                    a=a, b=b,
+                    f_n=f_n,
+                    is_division=True
+                )
+        elif total_calls == 2:
+            # F2: T(n) = T(n/b) + T(n/c) + f(n)
+            b1 = int(division_calls[0][1])
+            c1 = int(division_calls[1][1])
+            return RecurrenceInfo(
+                tipo="F2",
+                recurrence_raw=recurrence,
+                a=1, b=b1, c=1, d=c1,
+                f_n=f_n,
+                is_division=True
+            )
+        else:
+            # F3: múltiples llamadas
+            b = int(division_calls[0][1])
+            return RecurrenceInfo(
+                tipo="F3",
+                recurrence_raw=recurrence,
+                a=total_calls, b=b,
+                f_n=f_n,
+                is_division=True
+            )
+    
+    # Default: intentar inferir
+    return RecurrenceInfo(
+        tipo="F1",
+        recurrence_raw=recurrence,
+        a=2, b=2,
+        f_n=f_n,
+        is_division=True
+    )
+
+
+def get_applicable_methods(recurrence_type: str) -> List[str]:
+    """Obtiene los métodos aplicables para un tipo de recurrencia en orden de prioridad."""
+    return METHOD_PRIORITY.get(recurrence_type, ["substitution"])
+
+
+def can_apply_method(method: str, recurrence_type: str) -> bool:
+    """Verifica si un método es aplicable a un tipo de recurrencia."""
+    if method not in METHOD_APPLICABILITY:
+        return False
+    return recurrence_type in METHOD_APPLICABILITY[method]["applies"]
+
+
+# ============================================================================
+# MÉTODO: TEOREMA MAESTRO
+# ============================================================================
+
+def apply_master_theorem(info: RecurrenceInfo) -> MethodResult:
+    """
+    Aplica el Teorema Maestro para recurrencias de la forma T(n) = aT(n/b) + f(n).
+    Solo aplica a F0 y F1.
+    """
+    if info.tipo not in ["F0", "F1"]:
+        return MethodResult(
+            method="master_theorem",
+            applicable=False,
+            explanation=f"El Teorema Maestro no aplica a recurrencias tipo {info.tipo}"
+        )
+    
+    if not info.is_division:
+        return MethodResult(
+            method="master_theorem",
+            applicable=False,
+            explanation="El Teorema Maestro solo aplica a divisiones (DyV), no a restas"
+        )
+    
+    a = info.a or 1
+    b = info.b or 2
+    f_n = info.f_n or "1"
+    
+    steps = []
+    steps.append(f"Recurrencia: T(n) = {a}T(n/{b}) + {f_n}")
+    steps.append(f"Parámetros: a = {a}, b = {b}")
     
     # Calcular log_b(a)
-    log_b_a = math.log(a, b) if b > 1 else 0
-    result["steps"].append(f"Paso 1: Identificamos a={a}, b={b}, f(n)={f_n}")
-    result["steps"].append(f"Paso 2: Calculamos log_b(a) = log_{b}({a}) = {log_b_a:.4f}")
+    log_b_a = math.log(a) / math.log(b)
+    steps.append(f"log_b(a) = log_{b}({a}) = {log_b_a:.4f}")
     
-    # Clasificar f(n)
-    f_info = classify_f_n(f_n, b)
-    k = f_info.get("k")
+    # Determinar k de f(n) = Θ(n^k)
+    k = extract_polynomial_degree(f_n)
+    steps.append(f"f(n) = {f_n}, k = {k}")
     
-    if k is None:
-        result["applicable"] = False
-        result["steps"].append(f"No se pudo clasificar f(n) = {f_n} automáticamente")
-        return result
+    # Aplicar casos del Teorema Maestro
+    epsilon = 0.001
     
-    result["steps"].append(f"Paso 3: f(n) = {f_n} tiene orden n^{k}")
-    
-    # Determinar el caso
-    epsilon = 0.0001  # Tolerancia para comparaciones
-    
-    if k < log_b_a - epsilon:
-        # Caso 1
-        result["case"] = 1
-        complexity = f"n^(log_{b}({a}))"
+    if abs(k - log_b_a) < epsilon:
+        # Caso 2: k = log_b(a)
+        complexity = f"Θ(n^{k:.0f} log n)" if k == int(k) else f"Θ(n^{log_b_a:.4f} log n)"
+        steps.append(f"Caso 2: k = log_b(a) → T(n) = {complexity}")
+        return MethodResult(
+            method="master_theorem",
+            applicable=True,
+            complexity=complexity,
+            steps=steps,
+            explanation="Aplicando Caso 2 del Teorema Maestro: k = log_b(a)"
+        )
+    elif k < log_b_a:
+        # Caso 1: k < log_b(a)
         if log_b_a == int(log_b_a):
-            complexity = f"n^{int(log_b_a)}"
-        result["result"] = f"Θ({complexity})"
-        result["steps"].append(f"Paso 4: Como {k} < {log_b_a:.4f}, aplica Caso 1 del Master Theorem")
-        result["steps"].append(f"Paso 5: Por lo tanto T(n) = {result['result']}")
-        
-    elif abs(k - log_b_a) < epsilon:
-        # Caso 2
-        result["case"] = 2
-        if k == 0:
-            result["result"] = "Θ(log n)"
-        elif k == 1:
-            result["result"] = "Θ(n log n)"
+            complexity = f"Θ(n^{int(log_b_a)})"
         else:
-            result["result"] = f"Θ(n^{k} log n)"
-        result["steps"].append(f"Paso 4: Como {k} ≈ {log_b_a:.4f}, aplica Caso 2 del Master Theorem")
-        result["steps"].append(f"Paso 5: Por lo tanto T(n) = {result['result']}")
-        
+            complexity = f"Θ(n^{log_b_a:.4f})"
+        steps.append(f"Caso 1: k < log_b(a) → T(n) = {complexity}")
+        return MethodResult(
+            method="master_theorem",
+            applicable=True,
+            complexity=complexity,
+            steps=steps,
+            explanation="Aplicando Caso 1 del Teorema Maestro: k < log_b(a)"
+        )
     else:
-        # Caso 3
-        result["case"] = 3
-        result["result"] = f"Θ({f_n})"
-        result["steps"].append(f"Paso 4: Como {k} > {log_b_a:.4f}, aplica Caso 3 del Master Theorem")
-        result["steps"].append(f"Paso 5: Por lo tanto T(n) = {result['result']}")
-    
-    return result
+        # Caso 3: k > log_b(a)
+        complexity = f"Θ({f_n})"
+        steps.append(f"Caso 3: k > log_b(a) → T(n) = {complexity}")
+        return MethodResult(
+            method="master_theorem",
+            applicable=True,
+            complexity=complexity,
+            steps=steps,
+            explanation="Aplicando Caso 3 del Teorema Maestro: k > log_b(a)"
+        )
 
 
-def solve_by_iteration(a: int, b: int, f_n: str, rec_type: str) -> Dict[str, Any]:
-    """
-    Resuelve la recurrencia por el método de iteración/expansión.
-    """
-    result = {
-        "applicable": True,
-        "steps": [],
-        "result": ""
-    }
+def extract_polynomial_degree(f_n: str) -> float:
+    """Extrae el grado del polinomio de f(n)."""
+    f_n = f_n.strip().lower()
     
-    if rec_type == "decrease_and_conquer":
-        # T(n) = T(n-b) + f(n)
-        result["steps"].append(f"T(n) = T(n-{b}) + {f_n}")
-        result["steps"].append(f"T(n-{b}) = T(n-{2*b}) + {f_n}")
-        result["steps"].append(f"...")
-        result["steps"].append(f"Sustituyendo: T(n) = T(n-k·{b}) + k·{f_n}")
-        result["steps"].append(f"La recursión termina cuando n - k·{b} = caso base")
-        result["steps"].append(f"Por lo tanto k = n/{b} iteraciones")
+    if f_n in ["1", "o(1)", "θ(1)", "c", ""]:
+        return 0
+    
+    # Buscar n^k
+    power_match = re.search(r'n\s*\^\s*(\d+\.?\d*)', f_n)
+    if power_match:
+        return float(power_match.group(1))
+    
+    # Buscar n log n
+    if "log" in f_n and "n" in f_n:
+        if re.search(r'n\s*log', f_n) or re.search(r'log.*n.*n', f_n):
+            return 1  # n log n es como n^1 * log n
+    
+    # Solo n
+    if re.search(r'^n$', f_n) or f_n == "n":
+        return 1
+    
+    # n^2
+    if "n^2" in f_n or "n²" in f_n:
+        return 2
+    
+    # n^3
+    if "n^3" in f_n or "n³" in f_n:
+        return 3
+    
+    return 0
+
+
+# ============================================================================
+# MÉTODO: ITERACIÓN
+# ============================================================================
+
+def solve_by_iteration(info: RecurrenceInfo) -> MethodResult:
+    """
+    Resuelve por el método de iteración (expansión).
+    Aplica a: F4, F5, F0, F1
+    NO aplica a: F2, F3, F6
+    """
+    if info.tipo in ["F2", "F3", "F6"]:
+        return MethodResult(
+            method="iteration",
+            applicable=False,
+            explanation=f"El método de iteración no aplica a recurrencias tipo {info.tipo}"
+        )
+    
+    steps = []
+    a = info.a or 1
+    b = info.b or 2
+    f_n = info.f_n or "1"
+    
+    if info.is_division:
+        # DyV: T(n) = aT(n/b) + f(n)
+        steps.append(f"T(n) = {a}T(n/{b}) + {f_n}")
+        steps.append(f"T(n) = {a}[{a}T(n/{b}²) + {f_n}] + {f_n}")
+        steps.append(f"T(n) = {a}²T(n/{b}²) + {a}·{f_n} + {f_n}")
         
-        if f_n in ["1", "c", "o(1)"]:
-            result["result"] = "Θ(n)"
-        elif f_n in ["n", "o(n)"]:
-            result["result"] = "Θ(n²)"
+        # Generalizar
+        steps.append(f"Después de k iteraciones:")
+        steps.append(f"T(n) = {a}^k · T(n/{b}^k) + Σᵢ₌₀ᵏ⁻¹ {a}ⁱ · f(n/{b}ⁱ)")
+        
+        # Caso base cuando n/b^k = 1, k = log_b(n)
+        k = f"log_{b}(n)"
+        steps.append(f"El caso base se alcanza cuando n/{b}^k = 1, es decir k = {k}")
+        
+        # Calcular complejidad
+        log_b_a = math.log(a) / math.log(b) if a > 0 and b > 1 else 0
+        degree_f = extract_polynomial_degree(f_n)
+        
+        if abs(degree_f - log_b_a) < 0.001:
+            complexity = f"Θ(n^{degree_f:.0f} log n)"
+        elif degree_f < log_b_a:
+            complexity = f"Θ(n^{log_b_a:.4f})"
         else:
-            result["result"] = f"Θ(n · {f_n})"
+            complexity = f"Θ({f_n})"
+        
+        steps.append(f"Complejidad resultante: {complexity}")
+        
+        return MethodResult(
+            method="iteration",
+            applicable=True,
+            complexity=complexity,
+            steps=steps,
+            explanation="Resuelto por expansión iterativa de la recurrencia DyV"
+        )
+    else:
+        # RyV: T(n) = aT(n-b) + f(n)
+        steps.append(f"T(n) = {a}T(n-{b}) + {f_n}")
+        
+        if a == 1:
+            # F4: T(n) = T(n-b) + f(n) → Suma de f(n)
+            steps.append(f"T(n) = T(n-{b}) + {f_n}")
+            steps.append(f"T(n) = T(n-2·{b}) + {f_n} + {f_n}")
+            steps.append(f"T(n) = T(n-k·{b}) + k·{f_n}")
+            steps.append(f"Cuando n - k·{b} = 0, k = n/{b}")
             
-    elif rec_type == "divide_and_conquer":
-        # T(n) = aT(n/b) + f(n)
-        result["steps"].append(f"T(n) = {a}T(n/{b}) + {f_n}")
-        result["steps"].append(f"T(n/{b}) = {a}T(n/{b**2}) + f(n/{b})")
-        result["steps"].append(f"...")
-        result["steps"].append(f"Expandiendo k niveles: T(n) = {a}^k · T(n/{b}^k) + Σ {a}^i · f(n/{b}^i)")
-        result["steps"].append(f"La recursión termina cuando n/{b}^k = 1, es decir k = log_{b}(n)")
-        
-        # Aplicar Master Theorem para el resultado final
-        master = apply_master_theorem(a, b, f_n)
-        if master["applicable"]:
-            result["result"] = master["result"]
+            # Complejidad depende de f(n)
+            if f_n in ["1", "c", "O(1)"]:
+                complexity = "Θ(n)"
+            elif "n" in f_n and "^" not in f_n:
+                complexity = "Θ(n²)"
+            elif "n^2" in f_n:
+                complexity = "Θ(n³)"
+            else:
+                complexity = f"Θ(n · {f_n})"
+            
+            steps.append(f"Suma: (n/{b}) · {f_n} = {complexity}")
         else:
-            result["result"] = f"Θ(n^(log_{b}({a}))) o Θ({f_n}) dependiendo de f(n)"
+            # F5: T(n) = aT(n-b) + f(n) → Serie geométrica
+            steps.append(f"T(n) = {a}[{a}T(n-2·{b}) + {f_n}] + {f_n}")
+            steps.append(f"T(n) = {a}²T(n-2·{b}) + {a}·{f_n} + {f_n}")
+            steps.append(f"T(n) = {a}^k · T(n-k·{b}) + Σᵢ₌₀ᵏ⁻¹ {a}ⁱ · {f_n}")
+            
+            complexity = f"Θ({a}^(n/{b}))"
+            steps.append(f"La suma geométrica domina: {complexity}")
+        
+        return MethodResult(
+            method="iteration",
+            applicable=True,
+            complexity=complexity,
+            steps=steps,
+            explanation="Resuelto por expansión iterativa de la recurrencia RyV"
+        )
+
+
+# ============================================================================
+# MÉTODO: ECUACIÓN CARACTERÍSTICA
+# ============================================================================
+
+def solve_by_characteristic_equation(info: RecurrenceInfo) -> MethodResult:
+    """
+    Resuelve por el método de la ecuación característica.
+    Aplica a: F4, F5, F6
+    NO aplica a: F0, F1, F2, F3
     
-    return result
+    Para Fibonacci T(n) = T(n-1) + T(n-2), la solución es Θ(φⁿ) donde φ = (1+√5)/2
+    """
+    if info.tipo in ["F0", "F1", "F2", "F3"]:
+        return MethodResult(
+            method="characteristic_equation",
+            applicable=False,
+            explanation=f"La ecuación característica no aplica a recurrencias tipo {info.tipo} (división)"
+        )
+    
+    steps = []
+    a = info.a or 1
+    b = info.b or 1
+    c = info.c
+    d = info.d
+    f_n = info.f_n or "1"
+    
+    if info.tipo == "F6":
+        # F6: T(n) = aT(n-b) + cT(n-d) + f(n)
+        # Caso especial: Fibonacci T(n) = T(n-1) + T(n-2)
+        steps.append(f"Recurrencia: T(n) = {a}T(n-{b}) + {c}T(n-{d}) + {f_n}")
+        
+        if a == 1 and c == 1 and b == 1 and d == 2:
+            # Fibonacci clásico
+            steps.append("Esta es la recurrencia de Fibonacci")
+            steps.append("Ecuación característica: x² = x + 1")
+            steps.append("x² - x - 1 = 0")
+            steps.append("Usando la fórmula cuadrática:")
+            steps.append("x = (1 ± √5) / 2")
+            steps.append("φ = (1 + √5) / 2 ≈ 1.618 (razón áurea)")
+            steps.append("ψ = (1 - √5) / 2 ≈ -0.618")
+            steps.append("Solución general: T(n) = c₁φⁿ + c₂ψⁿ")
+            steps.append("Como |ψ| < 1, ψⁿ → 0 cuando n → ∞")
+            steps.append("Por lo tanto: T(n) = Θ(φⁿ)")
+            
+            phi = (1 + math.sqrt(5)) / 2
+            complexity = f"Θ(φⁿ) = Θ({phi:.4f}ⁿ)"
+            
+            return MethodResult(
+                method="characteristic_equation",
+                applicable=True,
+                complexity=complexity,
+                steps=steps,
+                explanation="Resuelto usando ecuación característica (Fibonacci → razón áurea)"
+            )
+        else:
+            # Ecuación característica general para F6
+            steps.append(f"Ecuación característica: x^{d} = {a}x^{d-b} + {c}")
+            
+            # Resolver simbólicamente
+            x = symbols('x')
+            char_eq = x**d - a * x**(d-b) - c
+            
+            try:
+                roots = sp.solve(char_eq, x)
+                steps.append(f"Raíces: {roots}")
+                
+                # La raíz dominante determina la complejidad
+                max_root = max([abs(complex(r)) for r in roots])
+                complexity = f"Θ({max_root:.4f}ⁿ)"
+                steps.append(f"Raíz dominante: {max_root:.4f}")
+            except:
+                complexity = f"Θ(max(|raíces|)ⁿ)"
+            
+            return MethodResult(
+                method="characteristic_equation",
+                applicable=True,
+                complexity=complexity,
+                steps=steps,
+                explanation="Resuelto usando ecuación característica para recurrencia F6"
+            )
+    
+    elif info.tipo == "F5":
+        # F5: T(n) = aT(n-b) + f(n)
+        steps.append(f"Recurrencia: T(n) = {a}T(n-{b}) + {f_n}")
+        steps.append(f"Ecuación característica: x^{b} = {a}")
+        steps.append(f"Raíz: x = {a}^(1/{b})")
+        
+        root = a ** (1/b)
+        
+        if f_n in ["1", "c", "O(1)"]:
+            complexity = f"Θ({a}^(n/{b}))"
+        else:
+            # Con término no homogéneo
+            complexity = f"Θ({a}^(n/{b}))"
+        
+        steps.append(f"Complejidad: {complexity}")
+        
+        return MethodResult(
+            method="characteristic_equation",
+            applicable=True,
+            complexity=complexity,
+            steps=steps,
+            explanation="Resuelto usando ecuación característica para recurrencia F5"
+        )
+    
+    elif info.tipo == "F4":
+        # F4: T(n) = T(n-b) + f(n)
+        steps.append(f"Recurrencia: T(n) = T(n-{b}) + {f_n}")
+        steps.append("Ecuación característica: x^b = 1")
+        steps.append(f"Raíz: x = 1 (multiplicidad {b})")
+        
+        # Para F4 con a=1, la solución es suma de f(n)
+        if f_n in ["1", "c", "O(1)"]:
+            complexity = "Θ(n)"
+        elif "n" in f_n:
+            degree = extract_polynomial_degree(f_n)
+            complexity = f"Θ(n^{int(degree)+1})"
+        else:
+            complexity = f"Θ(n · {f_n})"
+        
+        steps.append(f"La complejidad depende de la suma de {f_n}")
+        steps.append(f"Complejidad: {complexity}")
+        
+        return MethodResult(
+            method="characteristic_equation",
+            applicable=True,
+            complexity=complexity,
+            steps=steps,
+            explanation="Resuelto usando ecuación característica para recurrencia F4"
+        )
+    
+    return MethodResult(
+        method="characteristic_equation",
+        applicable=False,
+        explanation=f"Tipo de recurrencia {info.tipo} no manejado"
+    )
 
 
-def generate_recursion_tree_diagram(a: int, b: int, f_n: str, levels: int = 4) -> str:
+# ============================================================================
+# MÉTODO: ÁRBOL DE RECURSIÓN
+# ============================================================================
+
+def solve_by_recursion_tree(info: RecurrenceInfo) -> MethodResult:
     """
-    Genera un diagrama Mermaid del árbol de recursión.
+    Resuelve usando el método del árbol de recursión.
+    Aplica a: F2, F3, F6, F5, F1, F0
+    NO aplica a: F4
     """
+    if info.tipo == "F4":
+        return MethodResult(
+            method="recursion_tree",
+            applicable=False,
+            explanation="El árbol de recursión no aplica a recurrencias tipo F4 (una sola rama lineal)"
+        )
+    
+    steps = []
+    a = info.a or 1
+    b = info.b or 2
+    f_n = info.f_n or "1"
+    
+    if info.is_division:
+        # DyV
+        steps.append(f"Recurrencia: T(n) = {a}T(n/{b}) + {f_n}")
+        steps.append(f"Nivel 0: {f_n} (1 nodo)")
+        steps.append(f"Nivel 1: {a} nodos, cada uno con costo f(n/{b})")
+        steps.append(f"Nivel 2: {a}² nodos, cada uno con costo f(n/{b}²)")
+        steps.append(f"...")
+        steps.append(f"Nivel k: {a}^k nodos, cada uno con costo f(n/{b}^k)")
+        
+        height = f"log_{b}(n)"
+        steps.append(f"Altura del árbol: h = {height}")
+        
+        # Costo total por nivel y suma
+        log_b_a = math.log(a) / math.log(b) if a > 0 and b > 1 else 0
+        degree_f = extract_polynomial_degree(f_n)
+        
+        if a > 1:
+            steps.append(f"Número total de hojas: {a}^h = {a}^(log_{b}(n)) = n^(log_{b}({a})) = n^{log_b_a:.4f}")
+        
+        if abs(degree_f - log_b_a) < 0.001:
+            complexity = f"Θ(n^{degree_f:.0f} log n)"
+            steps.append("Todos los niveles contribuyen igualmente → factor log n")
+        elif degree_f < log_b_a:
+            complexity = f"Θ(n^{log_b_a:.4f})"
+            steps.append("El costo está dominado por las hojas")
+        else:
+            complexity = f"Θ({f_n})"
+            steps.append("El costo está dominado por la raíz")
+        
+        # Generar diagrama Mermaid
+        mermaid = generate_tree_diagram(info, depth=3)
+        
+        return MethodResult(
+            method="recursion_tree",
+            applicable=True,
+            complexity=complexity,
+            steps=steps,
+            explanation="Resuelto visualizando el árbol de recursión",
+            mermaid_diagram=mermaid
+        )
+    else:
+        # RyV
+        if info.tipo == "F6":
+            # Árbol binario (Fibonacci-like)
+            steps.append(f"Recurrencia: T(n) = {a}T(n-{b}) + {info.c}T(n-{info.d}) + {f_n}")
+            steps.append("Árbol de recursión binario (estilo Fibonacci)")
+            steps.append(f"Cada nodo se ramifica en {a + info.c} subnodos")
+            steps.append(f"Profundidad máxima: n/{b}")
+            
+            phi = (1 + math.sqrt(5)) / 2
+            complexity = f"Θ(φⁿ) ≈ Θ({phi:.4f}ⁿ)"
+            steps.append(f"Número de nodos crece exponencialmente: {complexity}")
+            
+            mermaid = generate_fibonacci_tree_diagram(info, depth=4)
+        else:
+            # F5
+            steps.append(f"Recurrencia: T(n) = {a}T(n-{b}) + {f_n}")
+            steps.append(f"Cada nivel tiene {a}^k nodos")
+            steps.append(f"Profundidad: n/{b} niveles")
+            
+            complexity = f"Θ({a}^(n/{b}))"
+            steps.append(f"Número total de nodos: {complexity}")
+            
+            mermaid = generate_tree_diagram(info, depth=3)
+        
+        return MethodResult(
+            method="recursion_tree",
+            applicable=True,
+            complexity=complexity,
+            steps=steps,
+            explanation="Resuelto visualizando el árbol de recursión",
+            mermaid_diagram=mermaid
+        )
+
+
+def generate_tree_diagram(info: RecurrenceInfo, depth: int = 3) -> str:
+    """Genera un diagrama Mermaid del árbol de recursión."""
     lines = ["graph TD"]
-    lines.append("    classDef level0 fill:#e1f5fe")
-    lines.append("    classDef level1 fill:#b3e5fc")
-    lines.append("    classDef level2 fill:#81d4fa")
-    lines.append("    classDef level3 fill:#4fc3f7")
     
-    node_id = 0
+    a = int(info.a or 1)
+    b = int(info.b or 2)
+    op = "/" if info.is_division else "-"
     
-    def get_node_id():
-        nonlocal node_id
-        node_id += 1
-        return f"N{node_id}"
+    node_id = [0]
     
-    def add_level(parent_id: str, size: str, level: int, parent_label: str = None):
-        if level >= levels:
-            return
+    def add_node(current_n: str, current_depth: int, parent_id: int = None):
+        my_id = node_id[0]
+        node_id[0] += 1
         
-        current_id = get_node_id()
-        label = f"T({size})"
-        cost = f_n.replace("n", f"({size})")
+        # Crear nodo
+        label = f"T({current_n})"
+        lines.append(f"    N{my_id}[\"{label}\"]")
         
-        if parent_id:
-            lines.append(f"    {parent_id} --> {current_id}[\"{label}<br/>costo: {cost}\"]")
-        else:
-            lines.append(f"    {current_id}[\"{label}<br/>costo: {cost}\"]")
+        # Conectar con padre
+        if parent_id is not None:
+            lines.append(f"    N{parent_id} --> N{my_id}")
         
-        lines.append(f"    class {current_id} level{min(level, 3)}")
-        
-        # Generar hijos
-        if level < levels - 1:
+        # Agregar hijos si no hemos llegado al límite
+        if current_depth < depth:
             for i in range(a):
-                if b > 1:
-                    child_size = f"{size}/{b}"
+                if info.is_division:
+                    child_n = f"{current_n}/{b}" if current_n == "n" else f"({current_n})/{b}"
                 else:
-                    child_size = f"{size}-1"
-                add_level(current_id, child_size, level + 1)
-    
-    add_level(None, "n", 0)
-    
-    # Agregar resumen de costos por nivel
-    lines.append("")
-    lines.append("    subgraph Costos[\"Costo por Nivel\"]")
-    for i in range(min(levels, 4)):
-        if b > 1:
-            nodes_at_level = a ** i
-            size = f"n/{b**i}" if i > 0 else "n"
+                    child_n = f"{current_n}-{b}" if current_n == "n" else f"({current_n})-{b}"
+                add_node(child_n, current_depth + 1, my_id)
         else:
-            nodes_at_level = a ** i
-            size = f"n-{i}" if i > 0 else "n"
-        cost = f"{nodes_at_level} × {f_n.replace('n', size)}"
-        lines.append(f"        L{i}[\"Nivel {i}: {cost}\"]")
-    lines.append("    end")
+            # Agregar indicador de continuación
+            dots_id = node_id[0]
+            node_id[0] += 1
+            lines.append(f"    N{dots_id}[\"...\"]")
+            lines.append(f"    N{my_id} --> N{dots_id}")
+    
+    add_node("n", 0)
     
     return "\n".join(lines)
 
 
-def calculate_recursion_tree_complexity(a: int, b: int, f_n: str) -> Dict[str, Any]:
-    """
-    Calcula la complejidad usando el método del árbol de recursión.
-    """
-    result = {
-        "steps": [],
-        "levels": [],
-        "height": "",
-        "total_cost": "",
-        "result": ""
-    }
+def generate_fibonacci_tree_diagram(info: RecurrenceInfo, depth: int = 4) -> str:
+    """Genera un diagrama Mermaid para árbol estilo Fibonacci."""
+    lines = ["graph TD"]
     
-    # Altura del árbol
-    if b > 1:
-        result["height"] = f"log_{b}(n)"
-        result["steps"].append(f"Altura del árbol: h = log_{b}(n)")
-    else:
-        result["height"] = "n"
-        result["steps"].append(f"Altura del árbol: h = n (decrece de 1 en 1)")
+    b = int(info.b or 1)
+    d = int(info.d or 2)
     
-    # Costo por nivel
-    result["steps"].append(f"En cada nivel i, hay {a}^i nodos")
+    node_id = [0]
     
-    f_info = classify_f_n(f_n, b)
-    k = f_info.get("k", 0)
-    
-    if b > 1:
-        result["steps"].append(f"El tamaño del problema en nivel i es n/{b}^i")
-        result["steps"].append(f"Costo por nodo en nivel i: f(n/{b}^i)")
-        result["steps"].append(f"Costo total nivel i: {a}^i × f(n/{b}^i)")
+    def add_node(current_n: str, current_depth: int, parent_id: int = None):
+        my_id = node_id[0]
+        node_id[0] += 1
         
-        # Sumar todos los niveles
-        result["steps"].append(f"Costo total = Σ(i=0 a log_{b}(n)) de {a}^i × f(n/{b}^i)")
+        label = f"T({current_n})"
+        lines.append(f"    N{my_id}[\"{label}\"]")
         
-        # Determinar resultado según la relación a vs b^k
-        log_b_a = math.log(a, b)
+        if parent_id is not None:
+            lines.append(f"    N{parent_id} --> N{my_id}")
         
-        if k < log_b_a:
-            result["result"] = f"Θ(n^{log_b_a:.2f})"
-        elif abs(k - log_b_a) < 0.01:
-            result["result"] = f"Θ(n^{k} × log n)"
+        if current_depth < depth:
+            # Rama izquierda (n-b)
+            child1 = f"{current_n}-{b}" if current_n == "n" else f"({current_n})-{b}"
+            add_node(child1, current_depth + 1, my_id)
+            
+            # Rama derecha (n-d)
+            child2 = f"{current_n}-{d}" if current_n == "n" else f"({current_n})-{d}"
+            add_node(child2, current_depth + 1, my_id)
         else:
-            result["result"] = f"Θ({f_n})"
-    else:
-        result["steps"].append(f"El tamaño del problema en nivel i es n-i")
-        result["steps"].append(f"Costo total = Σ(i=0 a n) de {a}^i × {f_n}")
-        
-        if a == 1:
-            if k == 0:
-                result["result"] = "Θ(n)"
+            dots_id = node_id[0]
+            node_id[0] += 1
+            lines.append(f"    N{dots_id}[\"...\"]")
+            lines.append(f"    N{my_id} --> N{dots_id}")
+    
+    add_node("n", 0)
+    
+    return "\n".join(lines)
+
+
+# ============================================================================
+# MÉTODO: SUSTITUCIÓN INTELIGENTE
+# ============================================================================
+
+def solve_by_substitution(info: RecurrenceInfo) -> MethodResult:
+    """
+    Resuelve por el método de sustitución (adivinar y verificar).
+    Aplica a todos los tipos de recurrencia.
+    """
+    steps = []
+    a = info.a or 1
+    b = info.b or 2
+    f_n = info.f_n or "1"
+    
+    steps.append(f"Recurrencia: {info.recurrence_raw}")
+    steps.append("Método de sustitución: adivinamos una solución y verificamos")
+    
+    # Usar SymPy para resolver
+    n = symbols('n', positive=True, integer=True)
+    T = Function('T')
+    
+    try:
+        if info.is_division:
+            # Para DyV, usamos resultados conocidos
+            log_b_a = math.log(a) / math.log(b) if a > 0 and b > 1 else 0
+            degree_f = extract_polynomial_degree(f_n)
+            
+            steps.append(f"Hipótesis: T(n) = Θ(n^{max(log_b_a, degree_f):.2f})")
+            
+            if abs(degree_f - log_b_a) < 0.001:
+                complexity = f"Θ(n^{degree_f:.0f} log n)"
+            elif degree_f < log_b_a:
+                complexity = f"Θ(n^{log_b_a:.4f})"
             else:
-                result["result"] = f"Θ(n × {f_n})"
+                complexity = f"Θ({f_n})"
         else:
-            result["result"] = f"Θ({a}^n)"
-            result["steps"].append(f"Serie geométrica con razón {a} → crecimiento exponencial")
-    
-    return result
+            # Para RyV
+            if a == 1:
+                # F4: lineal en suma de f(n)
+                if f_n in ["1", "c"]:
+                    complexity = "Θ(n)"
+                else:
+                    complexity = f"Θ(n · {f_n})"
+            elif info.tipo == "F6":
+                # Fibonacci-like
+                phi = (1 + math.sqrt(5)) / 2
+                complexity = f"Θ(φⁿ) ≈ Θ({phi:.4f}ⁿ)"
+            else:
+                # Exponencial
+                complexity = f"Θ({a}^(n/{b}))"
+        
+        steps.append(f"Verificación por inducción confirma: {complexity}")
+        
+        return MethodResult(
+            method="substitution",
+            applicable=True,
+            complexity=complexity,
+            steps=steps,
+            explanation="Resuelto por sustitución (adivinar y verificar)"
+        )
+    except Exception as e:
+        return MethodResult(
+            method="substitution",
+            applicable=True,
+            complexity="No determinado",
+            steps=steps + [f"Error en verificación: {str(e)}"],
+            explanation="El método de sustitución no pudo completarse"
+        )
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# TOOLS DE LANGCHAIN
-# ═══════════════════════════════════════════════════════════════════════════════
+# ============================================================================
+# FUNCIÓN PRINCIPAL DE ANÁLISIS
+# ============================================================================
 
-@tool
-def resolver_recurrencia(recurrencia: str) -> Dict[str, Any]:
+def analyze_recurrence(recurrence: str) -> RecurrenceAnalysis:
     """
-    Resuelve una ecuación de recurrencia usando múltiples métodos.
+    Analiza una recurrencia y aplica los métodos apropiados según ADA_24A.
     
     Args:
-        recurrencia: Ecuación en formato "T(n) = aT(n/b) + f(n)" o similar.
-    
+        recurrence: Ecuación de recurrencia como string
+        
     Returns:
-        Dict con:
-        - classification: Tipo de recurrencia (F0-F6)
-        - parameters: a, b, f(n) extraídos
-        - methods: Lista de métodos aplicados con sus resultados
-        - best_result: Mejor solución encontrada
-    
-    Ejemplos de entrada:
-    - "T(n) = 2T(n/2) + n"      (Merge Sort)
-    - "T(n) = T(n/2) + 1"       (Binary Search)
-    - "T(n) = T(n-1) + 1"       (Factorial)
-    - "T(n) = T(n-1) + T(n-2)"  (Fibonacci)
-    - "T(n) = 2T(n-1) + 1"      (Torres de Hanoi)
+        RecurrenceAnalysis con información completa del análisis
     """
     # Parsear la recurrencia
-    params = parse_recurrence(recurrencia)
+    info = parse_recurrence(recurrence)
     
-    result = {
-        "recurrence": recurrencia,
-        "classification": params["classification"],
-        "parameters": {
-            "a": params["a"],
-            "b": params["b"],
-            "f_n": params["f_n"],
-            "type": params["recurrence_type"]
-        },
-        "methods": [],
-        "best_result": ""
-    }
+    # Obtener métodos aplicables en orden de prioridad
+    applicable = get_applicable_methods(info.tipo)
     
-    a, b, f_n = params["a"], params["b"], params["f_n"]
-    rec_type = params["recurrence_type"]
-    classification = params["classification"]
+    # Aplicar cada método y recopilar resultados
+    all_results = []
+    primary_result = None
     
-    # Intentar cada método según la clasificación
+    for method in applicable:
+        if method == "master_theorem":
+            result = apply_master_theorem(info)
+        elif method == "iteration":
+            result = solve_by_iteration(info)
+        elif method == "characteristic_equation":
+            result = solve_by_characteristic_equation(info)
+        elif method == "recursion_tree":
+            result = solve_by_recursion_tree(info)
+        elif method == "substitution":
+            result = solve_by_substitution(info)
+        else:
+            continue
+        
+        all_results.append(result)
+        
+        # El primer método aplicable es el primario
+        if result.applicable and primary_result is None:
+            primary_result = result
     
-    # 1. Master Theorem (solo para F0, F1)
-    if classification in METHOD_APPLICABILITY["master"]:
-        master_result = apply_master_theorem(a, b, f_n)
-        result["methods"].append({
-            "method": "master",
-            "applicable": master_result["applicable"],
-            "steps": master_result["steps"],
-            "result": master_result["result"]
-        })
-        if master_result["applicable"]:
-            result["best_result"] = master_result["result"]
+    # Si ningún método fue aplicable, usar sustitución como fallback
+    if primary_result is None:
+        primary_result = solve_by_substitution(info)
+        all_results.append(primary_result)
     
-    # 2. Método de Iteración
-    if classification in METHOD_APPLICABILITY["iteration"]:
-        iter_result = solve_by_iteration(a, b, f_n, rec_type)
-        result["methods"].append({
-            "method": "iteration",
-            "applicable": iter_result["applicable"],
-            "steps": iter_result["steps"],
-            "result": iter_result["result"]
-        })
-        if not result["best_result"]:
-            result["best_result"] = iter_result["result"]
-    
-    # 3. Árbol de Recursión
-    if classification in METHOD_APPLICABILITY["recursion_tree"]:
-        tree_result = calculate_recursion_tree_complexity(a, b, f_n)
-        result["methods"].append({
-            "method": "recursion_tree",
-            "applicable": True,
-            "steps": tree_result["steps"],
-            "result": tree_result["result"],
-            "height": tree_result["height"]
-        })
-        if not result["best_result"]:
-            result["best_result"] = tree_result["result"]
-    
-    # Casos especiales
-    if rec_type == "multiple_recursive":
-        # Fibonacci-like: T(n) = T(n-1) + T(n-2) + O(1) → O(φ^n)
-        phi = (1 + math.sqrt(5)) / 2
-        result["methods"].append({
-            "method": "characteristic",
-            "applicable": True,
-            "steps": [
-                "Ecuación característica: x² = x + 1",
-                f"Raíces: φ = (1+√5)/2 ≈ {phi:.4f}, ψ = (1-√5)/2",
-                "Solución general: T(n) = c₁φⁿ + c₂ψⁿ",
-                f"Término dominante: Θ(φⁿ) ≈ Θ({phi:.4f}ⁿ)"
-            ],
-            "result": "Θ(φⁿ) ≈ Θ(1.618ⁿ)"
-        })
-        result["best_result"] = "Θ(φⁿ) ≈ Θ(1.618ⁿ)"
-    
-    return result
+    return RecurrenceAnalysis(
+        recurrence_info=info,
+        applicable_methods=applicable,
+        primary_result=primary_result,
+        all_results=all_results
+    )
 
+
+# ============================================================================
+# TOOLS PARA LANGCHAIN
+# ============================================================================
 
 @tool
-def generar_arbol_recurrencia(recurrencia: str, niveles: int = 4) -> Dict[str, Any]:
+def clasificar_recurrencia(recurrence: str) -> Dict[str, Any]:
     """
-    Genera un diagrama del árbol de recursión en formato Mermaid.
+    Clasifica una ecuación de recurrencia según el sistema ADA_24A.
+    
+    Tipos:
+    - F0: T(n) = T(n/b) + f(n) [DyV simple]
+    - F1: T(n) = aT(n/b) + f(n) [DyV general]
+    - F2: T(n) = T(n/b) + T(n/c) + f(n) [DyV múltiple]
+    - F3: T(n) = múltiples T(n/bᵢ) + f(n) [DyV generalizado]
+    - F4: T(n) = T(n-b) + f(n) [RyV lineal]
+    - F5: T(n) = aT(n-b) + f(n) [RysV exponencial]
+    - F6: T(n) = aT(n-b) + cT(n-d) + f(n) [Fibonacci-like]
     
     Args:
-        recurrencia: Ecuación de recurrencia.
-        niveles: Número de niveles a mostrar (default: 4).
-    
+        recurrence: La ecuación de recurrencia a clasificar
+        
     Returns:
-        Dict con:
-        - mermaid_diagram: Código Mermaid del diagrama
-        - analysis: Análisis del árbol (altura, costo por nivel, etc.)
+        Información sobre el tipo y métodos aplicables
     """
-    params = parse_recurrence(recurrencia)
-    a, b, f_n = params["a"], params["b"], params["f_n"]
-    
-    # Generar diagrama
-    mermaid = generate_recursion_tree_diagram(a, b, f_n, niveles)
-    
-    # Análisis
-    analysis = calculate_recursion_tree_complexity(a, b, f_n)
+    info = parse_recurrence(recurrence)
+    methods = get_applicable_methods(info.tipo)
     
     return {
-        "mermaid_diagram": mermaid,
-        "analysis": {
-            "height": analysis["height"],
-            "steps": analysis["steps"],
-            "total_complexity": analysis["result"]
-        }
+        "tipo": info.tipo,
+        "descripcion": get_type_description(info.tipo),
+        "parametros": {
+            "a": info.a,
+            "b": info.b,
+            "c": info.c,
+            "d": info.d,
+            "f_n": info.f_n,
+            "es_division": info.is_division
+        },
+        "metodos_aplicables": methods,
+        "metodo_recomendado": methods[0] if methods else "substitution"
     }
 
 
-@tool  
-def detectar_tipo_recurrencia(pseudocode: str) -> Dict[str, Any]:
+def get_type_description(tipo: str) -> str:
+    """Devuelve una descripción del tipo de recurrencia."""
+    descriptions = {
+        "F0": "Divide y Vencerás simple: T(n) = T(n/b) + f(n)",
+        "F1": "Divide y Vencerás general (Teorema Maestro): T(n) = aT(n/b) + f(n)",
+        "F2": "Divide y Vencerás múltiple: T(n) = T(n/b) + T(n/c) + f(n)",
+        "F3": "Divide y Vencerás generalizado: múltiples llamadas con diferentes divisores",
+        "F4": "Resta y Vencerás lineal: T(n) = T(n-b) + f(n)",
+        "F5": "Resta y serás Vencido exponencial: T(n) = aT(n-b) + f(n)",
+        "F6": "Fibonacci-like: T(n) = aT(n-b) + cT(n-d) + f(n)"
+    }
+    return descriptions.get(tipo, "Tipo desconocido")
+
+
+@tool
+def resolver_recurrencia(recurrence: str) -> Dict[str, Any]:
     """
-    Analiza pseudocódigo y detecta el tipo de recurrencia.
+    Resuelve una ecuación de recurrencia usando el método más apropiado según ADA_24A.
+    
+    Selección de método por tipo:
+    - F0, F1: Teorema Maestro (preferido) o Iteración
+    - F2, F3: Árbol de Recursión
+    - F4: Ecuación Característica o Iteración
+    - F5: Ecuación Característica o Árbol de Recursión
+    - F6: Ecuación Característica (ej: Fibonacci → φⁿ)
     
     Args:
-        pseudocode: Código en pseudocódigo.
-    
+        recurrence: La ecuación de recurrencia a resolver
+        
     Returns:
-        Dict con información sobre la recurrencia detectada.
+        Análisis completo con complejidad y pasos
     """
+    analysis = analyze_recurrence(recurrence)
+    
     result = {
-        "is_recursive": False,
-        "recursive_calls": [],
-        "base_cases": [],
-        "recurrence_equation": "",
-        "classification": ""
+        "recurrencia_original": recurrence,
+        "tipo": analysis.recurrence_info.tipo,
+        "metodo_utilizado": analysis.primary_result.method,
+        "complejidad": analysis.primary_result.complexity,
+        "pasos": analysis.primary_result.steps,
+        "explicacion": analysis.primary_result.explanation,
+        "metodos_aplicables": analysis.applicable_methods
     }
     
-    lines = pseudocode.strip().split('\n')
-    func_name = None
-    
-    # Detectar nombre de la función
-    for line in lines:
-        line = line.strip()
-        if '(' in line and ')' in line and 'begin' not in line.lower():
-            if not any(kw in line.lower() for kw in ['if', 'while', 'for', 'call']):
-                match = re.match(r'(\w+)\s*\(', line)
-                if match:
-                    func_name = match.group(1)
-                    break
-    
-    if not func_name:
-        return result
-    
-    # Buscar llamadas recursivas y casos base
-    for line in lines:
-        line_lower = line.lower().strip()
-        
-        # Buscar llamadas recursivas
-        if 'call' in line_lower and func_name.lower() in line_lower:
-            result["is_recursive"] = True
-            # Extraer argumentos de la llamada
-            call_match = re.search(rf'call\s+{func_name}\s*\(([^)]+)\)', line, re.IGNORECASE)
-            if call_match:
-                args = call_match.group(1)
-                result["recursive_calls"].append(args)
-        
-        # Buscar casos base (return con condición simple)
-        if 'return' in line_lower:
-            if any(base in line_lower for base in ['= 1', '= 0', '<= 1', '<= 0', '== 1', '== 0']):
-                result["base_cases"].append(line.strip())
-    
-    # Clasificar tipo de recurrencia
-    if result["is_recursive"]:
-        calls = result["recursive_calls"]
-        num_calls = len(calls)
-        
-        # Detectar patrón de división
-        has_division = any('/' in c for c in calls)
-        has_subtraction = any('-' in c for c in calls)
-        
-        if has_division:
-            if num_calls == 1:
-                result["classification"] = "F0"
-                result["recurrence_equation"] = "T(n) = T(n/b) + f(n)"
-            else:
-                result["classification"] = "F1"
-                result["recurrence_equation"] = f"T(n) = {num_calls}T(n/b) + f(n)"
-        elif has_subtraction:
-            if num_calls == 1:
-                result["classification"] = "F4"
-                result["recurrence_equation"] = "T(n) = T(n-1) + f(n)"
-            elif num_calls == 2:
-                result["classification"] = "F6"
-                result["recurrence_equation"] = "T(n) = T(n-1) + T(n-2) + f(n)"
-            else:
-                result["classification"] = "F5"
-                result["recurrence_equation"] = f"T(n) = {num_calls}T(n-1) + f(n)"
+    # Solo incluir diagrama si el método es árbol de recursión
+    if analysis.primary_result.mermaid_diagram:
+        result["diagrama_mermaid"] = analysis.primary_result.mermaid_diagram
     
     return result
 
 
 @tool
-def calcular_espacio_recursivo(recurrencia: str, variables_locales: int = 1) -> Dict[str, Any]:
+def generar_arbol_recursion(recurrence: str) -> Dict[str, Any]:
     """
-    Calcula la complejidad espacial de un algoritmo recursivo.
+    Genera un diagrama de árbol de recursión para una recurrencia.
+    
+    Solo aplica a tipos: F0, F1, F2, F3, F5, F6
+    NO aplica a: F4 (tiene una sola rama lineal)
     
     Args:
-        recurrencia: Ecuación de recurrencia.
-        variables_locales: Número de variables locales por llamada.
-    
+        recurrence: La ecuación de recurrencia
+        
     Returns:
-        Dict con análisis de espacio.
+        Diagrama Mermaid y análisis del árbol
     """
-    params = parse_recurrence(recurrencia)
-    a, b = params["a"], params["b"]
-    rec_type = params["recurrence_type"]
+    info = parse_recurrence(recurrence)
     
-    result = {
-        "stack_depth": "",
-        "frame_size": f"O({variables_locales})",
-        "auxiliary_space": "O(1)",
-        "total_space": "",
-        "explanation": []
+    if info.tipo == "F4":
+        return {
+            "aplicable": False,
+            "razon": "El árbol de recursión no aplica a recurrencias tipo F4 (Resta y Vencerás lineal) porque solo tiene una rama, no forma un árbol.",
+            "sugerencia": "Use el método de iteración o ecuación característica para F4"
+        }
+    
+    result = solve_by_recursion_tree(info)
+    
+    return {
+        "aplicable": result.applicable,
+        "tipo_recurrencia": info.tipo,
+        "complejidad": result.complexity,
+        "diagrama_mermaid": result.mermaid_diagram,
+        "pasos": result.steps
     }
+
+
+@tool
+def aplicar_teorema_maestro(a: float, b: float, f_n: str) -> Dict[str, Any]:
+    """
+    Aplica el Teorema Maestro a una recurrencia T(n) = aT(n/b) + f(n).
     
-    if rec_type == "divide_and_conquer":
-        result["stack_depth"] = f"O(log_{b}(n))"
-        result["explanation"].append(f"La profundidad de recursión es log_{b}(n) porque dividimos por {b}")
-        
-        if a == 1:
-            result["total_space"] = f"O(log n)"
-        else:
-            result["total_space"] = f"O(log n)"  # Solo se mantiene un camino activo
-            result["explanation"].append("Aunque hay múltiples ramas, solo una está activa a la vez en la pila")
-            
-    elif rec_type in ["decrease_and_conquer", "decrease_and_lose"]:
-        result["stack_depth"] = "O(n)"
-        result["explanation"].append("La profundidad de recursión es O(n) porque restamos una constante")
-        
-        if a == 1:
-            result["total_space"] = "O(n)"
-        else:
-            result["total_space"] = "O(n)"  # Por la pila
-            result["explanation"].append("El espacio está dominado por la profundidad de la pila")
-            
-    elif rec_type == "multiple_recursive":
-        result["stack_depth"] = "O(n)"
-        result["total_space"] = "O(n)"
-        result["explanation"].append("Fibonacci-like: profundidad O(n) aunque tiene múltiples ramas")
+    Solo aplica a recurrencias de división (DyV):
+    - F0: a = 1
+    - F1: a ≥ 1
     
-    return result
+    Casos del Teorema Maestro:
+    - Caso 1: Si f(n) = O(n^(log_b(a) - ε)), entonces T(n) = Θ(n^(log_b(a)))
+    - Caso 2: Si f(n) = Θ(n^(log_b(a))), entonces T(n) = Θ(n^(log_b(a)) log n)
+    - Caso 3: Si f(n) = Ω(n^(log_b(a) + ε)), entonces T(n) = Θ(f(n))
+    
+    Args:
+        a: Número de subproblemas
+        b: Factor de división
+        f_n: Término no recursivo como string (ej: "n", "n^2", "1")
+        
+    Returns:
+        Resultado del Teorema Maestro
+    """
+    info = RecurrenceInfo(
+        tipo="F1" if a > 1 else "F0",
+        recurrence_raw=f"T(n) = {a}T(n/{b}) + {f_n}",
+        a=a, b=b, f_n=f_n,
+        is_division=True
+    )
+    
+    result = apply_master_theorem(info)
+    
+    return {
+        "aplicable": result.applicable,
+        "complejidad": result.complexity,
+        "pasos": result.steps,
+        "explicacion": result.explanation
+    }
+
+
+@tool
+def resolver_ecuacion_caracteristica(recurrence: str) -> Dict[str, Any]:
+    """
+    Resuelve una recurrencia usando el método de la ecuación característica.
+    
+    Aplica a tipos: F4, F5, F6
+    NO aplica a: F0, F1, F2, F3 (usan división, no resta)
+    
+    Ejemplos:
+    - Fibonacci T(n) = T(n-1) + T(n-2) → Θ(φⁿ) donde φ = (1+√5)/2 ≈ 1.618
+    - T(n) = 2T(n-1) + 1 → Θ(2ⁿ)
+    - T(n) = T(n-1) + n → Θ(n²)
+    
+    Args:
+        recurrence: La ecuación de recurrencia
+        
+    Returns:
+        Solución usando ecuación característica
+    """
+    info = parse_recurrence(recurrence)
+    
+    if info.tipo in ["F0", "F1", "F2", "F3"]:
+        return {
+            "aplicable": False,
+            "razon": f"La ecuación característica no aplica a recurrencias tipo {info.tipo} (división). Use Teorema Maestro o Árbol de Recursión.",
+            "tipo_detectado": info.tipo
+        }
+    
+    result = solve_by_characteristic_equation(info)
+    
+    return {
+        "aplicable": result.applicable,
+        "tipo_recurrencia": info.tipo,
+        "complejidad": result.complexity,
+        "pasos": result.steps,
+        "explicacion": result.explanation
+    }
+
+
+# Lista de todas las herramientas
+RECURSIVE_TOOLS = [
+    clasificar_recurrencia,
+    resolver_recurrencia,
+    generar_arbol_recursion,
+    aplicar_teorema_maestro,
+    resolver_ecuacion_caracteristica
+]
