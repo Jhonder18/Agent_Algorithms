@@ -113,7 +113,7 @@ def analyze_with_correct_methods(recurrence_raw: str, classification: str) -> Di
         classification: Tipo de recurrencia (F0-F6)
     
     Returns:
-        Resultado del análisis con complejidad y diagrama Mermaid (si aplica)
+        Resultado del análisis con complejidad y diagrama Mermaid (SIEMPRE si no es F4)
     """
     # Realizar análisis completo
     analysis = analyze_recurrence(recurrence_raw)
@@ -121,7 +121,7 @@ def analyze_with_correct_methods(recurrence_raw: str, classification: str) -> Di
     results = {
         "methods_applied": [],
         "best_result": "",
-        "tree_diagram": None,  # Solo se incluye si el método es árbol de recursión
+        "tree_diagram": None,
         "tree_analysis": {},
         "primary_method": ""
     }
@@ -146,9 +146,9 @@ def analyze_with_correct_methods(recurrence_raw: str, classification: str) -> Di
         results["best_result"] = analysis.primary_result.complexity or ""
         results["primary_method"] = analysis.primary_result.method
         
-        # Solo incluir el diagrama si el método principal es árbol de recursión
-        if analysis.primary_result.method != "recursion_tree":
-            results["tree_diagram"] = None
+        # SIEMPRE incluir el diagrama si existe (ya no depende del método)
+        if analysis.primary_result.mermaid_diagram:
+            results["tree_diagram"] = analysis.primary_result.mermaid_diagram
     
     return results
 
@@ -268,8 +268,8 @@ def recusive_temporal_node(state: AnalyzerState) -> AnalyzerState:
     state["ecuaciones"]["big_Theta_temporal"] = result
     state["ecuaciones"]["big_Omega_temporal"] = result.replace("Θ", "Ω")
     
-    # Construir análisis del árbol de recursión SOLO si aplica
-    if classification != "F4" and analysis.get("tree_diagram"):
+    # Construir análisis del árbol de recursión SIEMPRE (excepto F4)
+    if classification != "F4":
         # Parsear para obtener info del árbol
         info = parse_recurrence(recurrence_raw)
         tree_levels = build_tree_levels(info)
@@ -279,25 +279,25 @@ def recusive_temporal_node(state: AnalyzerState) -> AnalyzerState:
         else:
             height = f"n/{int(info.b)}"
         
+        # Obtener diagrama (siempre debería existir para no-F4)
+        diagram = analysis.get("tree_diagram", "")
+        
         tree_analysis: RecursionTreeAnalysis = {
             "levels": tree_levels,
             "height": height,
             "total_nodes": f"Σ nodos en todos los niveles",
             "total_cost": result,
-            "mermaid_diagram": analysis["tree_diagram"],
+            "mermaid_diagram": diagram,
             "ascii_diagram": ""
         }
         state["recursion_tree"] = tree_analysis
-        state["mermaid_diagram"] = analysis["tree_diagram"]
-        state["razonamiento"].append(f"\n📊 Diagrama de árbol de recursión generado (método: {analysis['primary_method']})")
+        state["mermaid_diagram"] = diagram
+        state["razonamiento"].append(f"\n📊 Diagrama de árbol de recursión generado (método de resolución: {analysis['primary_method']})")
     else:
         # F4 no tiene árbol de recursión (es una línea, no un árbol)
         state["recursion_tree"] = None
         state["mermaid_diagram"] = None
-        if classification == "F4":
-            state["razonamiento"].append(f"\nℹ️ No se genera árbol de recursión para tipo F4 (estructura lineal, no árbol)")
-        elif analysis["primary_method"] != "recursion_tree":
-            state["razonamiento"].append(f"\nℹ️ Diagrama no generado (método usado: {analysis['primary_method']}, no árbol de recursión)")
+        state["razonamiento"].append(f"\nℹ️ No se genera árbol de recursión para tipo F4 (estructura lineal, no árbol)")
     
     # Resumen final
     state["razonamiento"].append("")
